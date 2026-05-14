@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SplitTrack — Add Expense</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --bg:#0C0C0D; --bg2:#131315; --bg3:#1A1A1E; --bg4:#222227; --bg5:#2A2A2F;
+  --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.11); --border3:rgba(255,255,255,0.16);
+  --text:#EDEAE2; --text2:#8E8C84; --text3:#4E4C47;
+  --accent:#C8F55A; --accent2:#A8D848; --adim:rgba(200,245,90,0.08); --aborder:rgba(200,245,90,0.22);
+  --blue:#6B9FFF; --bdim:rgba(107,159,255,0.09); --bborder:rgba(107,159,255,0.22);
+  --red:#FF6E6E; --rdim:rgba(255,110,110,0.09);
+  --amber:#F7CA45; --amberdim:rgba(247,202,69,0.09);
+  --teal:#3ED9C8; --tealdim:rgba(62,217,200,0.09);
+  --green:#4ADE80; --greendim:rgba(74,222,128,0.09);
+  --ff-d:'Fraunces',Georgia,serif; --ff-b:'DM Sans',sans-serif; --ff-m:'DM Mono',monospace;
+  --r:10px; --rl:16px;
+}
+html { scroll-behavior:smooth; }
+body { background:var(--bg); color:var(--text); font-family:var(--ff-b); font-size:14px; line-height:1.5; min-height:100vh; }
+body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:0; background-image:radial-gradient(circle,rgba(255,255,255,0.02) 1px,transparent 1px); background-size:28px 28px; }
+
+/* NAV */
+nav { position:sticky; top:0; z-index:200; display:flex; align-items:center; justify-content:space-between; padding:0 28px; height:56px; background:rgba(12,12,13,0.92); backdrop-filter:blur(18px); border-bottom:1px solid var(--border); }
+.nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+.nav-mark { width:30px; height:30px; border-radius:8px; background:var(--accent); color:#0C0C0D; display:flex; align-items:center; justify-content:center; font-family:var(--ff-d); font-size:15px; font-weight:500; }
+.nav-wordmark { font-family:var(--ff-d); font-size:17px; font-weight:500; color:var(--text); letter-spacing:-.2px; }
+.nav-breadcrumb { font-size:12px; color:var(--text3); display:flex; align-items:center; gap:6px; font-family:var(--ff-m); }
+.nav-breadcrumb a { color:var(--text3); text-decoration:none; transition:color .2s; }
+.nav-breadcrumb a:hover { color:var(--text2); }
+.nav-right { display:flex; align-items:center; gap:8px; }
+.btn-ghost { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:8px; border:1px solid var(--border2); color:var(--text2); font-size:12px; text-decoration:none; font-family:var(--ff-b); transition:all .15s; background:transparent; cursor:pointer; }
+.btn-ghost:hover { color:var(--text); border-color:var(--border3); }
+.btn-accent { display:inline-flex; align-items:center; gap:6px; padding:8px 18px; border-radius:8px; background:var(--accent); color:#0C0C0D; font-size:13px; font-weight:500; border:none; cursor:pointer; font-family:var(--ff-b); transition:background .15s; }
+.btn-accent:hover { background:var(--accent2); }
+.btn-accent:disabled { opacity:.4; cursor:not-allowed; background:var(--bg4); color:var(--text3); }
+
+/* SHELL */
+.shell { max-width:1000px; margin:0 auto; padding:0 28px 60px; position:relative; z-index:1; }
+
+/* PAGE HEADER */
+.page-header { padding:28px 0 20px; animation:fadeUp .4s ease both; }
+.page-title { font-family:var(--ff-d); font-size:24px; font-weight:300; letter-spacing:-.5px; }
+.page-title em { font-style:italic; color:var(--accent); }
+.page-sub { font-size:12px; color:var(--text3); margin-top:4px; font-family:var(--ff-m); }
+
+/* TABS */
+.tabs { display:flex; gap:2px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); padding:4px; width:fit-content; margin-bottom:24px; animation:fadeUp .4s ease both .06s; }
+.tab { padding:7px 20px; border-radius:7px; font-size:13px; color:var(--text3); cursor:pointer; transition:all .2s; border:none; background:transparent; font-family:var(--ff-b); }
+.tab.active { background:var(--bg4); color:var(--text); }
+.tab:hover:not(.active) { color:var(--text2); }
+
+/* SECTION CARDS */
+.section { background:var(--bg2); border:1px solid var(--border); border-radius:var(--rl); overflow:hidden; margin-bottom:16px; animation:fadeUp .4s ease both .1s; }
+.section-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); }
+.section-title { font-family:var(--ff-d); font-size:14px; font-weight:500; color:var(--text); letter-spacing:-.1px; display:flex; align-items:center; gap:8px; }
+.step-badge { font-size:10px; font-family:var(--ff-m); padding:2px 8px; border-radius:20px; background:var(--bg4); color:var(--text3); border:1px solid var(--border); }
+.step-badge.done { background:var(--adim); color:var(--accent); border-color:var(--aborder); }
+.section-body { padding:20px; }
+
+/* UPLOAD ZONE */
+.upload-zone {
+  border:1.5px dashed var(--border2); border-radius:var(--rl);
+  padding:40px 24px; text-align:center; cursor:pointer;
+  transition:all .2s; position:relative; overflow:hidden;
+}
+.upload-zone:hover, .upload-zone.drag { border-color:var(--aborder); background:var(--adim); }
+.upload-zone.drag { transform:scale(1.01); }
+.upload-big-icon { font-size:36px; margin-bottom:12px; display:block; }
+.upload-label { font-size:15px; font-weight:500; color:var(--text); margin-bottom:6px; }
+.upload-sub { font-size:12px; color:var(--text3); margin-bottom:16px; }
+.upload-types { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+.upload-type { font-size:11px; padding:3px 10px; border-radius:20px; background:var(--bg4); color:var(--text3); border:1px solid var(--border); font-family:var(--ff-m); }
+#fileInput { display:none; }
+
+/* FORM FIELDS */
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.form-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+.field { display:flex; flex-direction:column; gap:6px; }
+.field-full { grid-column:1/-1; }
+.label { font-size:11px; color:var(--text2); font-family:var(--ff-m); text-transform:uppercase; letter-spacing:.05em; }
+input[type=text], input[type=number], input[type=date], textarea, select {
+  background:var(--bg3); border:1px solid var(--border); border-radius:var(--r);
+  padding:10px 14px; font-size:13px; color:var(--text); font-family:var(--ff-b);
+  outline:none; transition:border-color .2s, background .2s; width:100%;
+  -webkit-appearance:none;
+}
+input:focus, textarea:focus, select:focus { border-color:var(--aborder); background:var(--bg4); }
+input::placeholder, textarea::placeholder { color:var(--text3); }
+select { cursor:pointer; }
+textarea { resize:vertical; min-height:70px; }
+
+/* PEOPLE PILLS BAR */
+.people-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:14px 20px; border-bottom:1px solid var(--border); background:var(--bg3); }
+.people-bar-label { font-size:11px; color:var(--text3); font-family:var(--ff-m); text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
+.person-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 12px; border-radius:20px; border:1px solid var(--border2);
+  background:var(--bg4); color:var(--text2); font-size:12px; cursor:pointer;
+  transition:all .18s; user-select:none; font-family:var(--ff-b);
+}
+.person-pill:hover { border-color:var(--border3); color:var(--text); }
+.person-pill.active { background:var(--adim); border-color:var(--aborder); color:var(--accent); }
+.person-pill .pill-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.add-person-pill { padding:5px 12px; border-radius:20px; border:1px dashed var(--border2); background:transparent; color:var(--text3); font-size:12px; cursor:pointer; transition:all .18s; font-family:var(--ff-b); }
+.add-person-pill:hover { border-color:var(--border3); color:var(--text2); }
+
+/* ── SPREADSHEET TABLE ── */
+.sheet-wrap { overflow-x:auto; }
+table.sheet {
+  width:100%; border-collapse:collapse;
+  font-size:13px;
+}
+table.sheet thead tr { background:var(--bg3); border-bottom:1px solid var(--border2); }
+table.sheet thead th {
+  padding:10px 14px; text-align:left; font-weight:500; font-size:10px;
+  text-transform:uppercase; letter-spacing:.07em; color:var(--text3); font-family:var(--ff-m);
+  white-space:nowrap;
+}
+table.sheet thead th:first-child { padding-left:20px; }
+table.sheet thead th:last-child { padding-right:14px; }
+table.sheet tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
+table.sheet tbody tr:last-child { border-bottom:none; }
+table.sheet tbody tr:hover { background:var(--bg3); }
+table.sheet tbody tr.row-me { background:rgba(200,245,90,0.03); }
+table.sheet tbody td { padding:10px 14px; vertical-align:middle; }
+table.sheet tbody td:first-child { padding-left:20px; }
+
+/* row number */
+.row-num { font-size:10px; color:var(--text3); font-family:var(--ff-m); width:28px; text-align:center; }
+.item-name-cell { font-weight:500; color:var(--text); }
+.item-qty { color:var(--text3); font-family:var(--ff-m); font-size:12px; }
+.item-price { font-family:var(--ff-m); font-size:13px; color:var(--text); font-weight:500; white-space:nowrap; }
+.item-price.split { color:var(--blue); }
+
+/* assignee cell */
+.assignee-cell { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.assignee-badge {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 9px; border-radius:20px; font-size:11px;
+  border:1px solid transparent; cursor:pointer; transition:all .15s;
+  font-family:var(--ff-b); white-space:nowrap;
+}
+.assignee-badge:hover { opacity:.8; }
+.assignee-badge.unset { background:var(--bg4); border-color:var(--border); color:var(--text3); }
+.assignee-badge .ab-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+
+/* split toggle */
+.split-cell { display:flex; align-items:center; gap:8px; }
+.split-toggle { display:flex; gap:4px; }
+.st-btn { padding:3px 9px; border-radius:6px; font-size:11px; border:1px solid var(--border); background:transparent; color:var(--text3); cursor:pointer; font-family:var(--ff-b); transition:all .15s; }
+.st-btn:hover { border-color:var(--border2); color:var(--text2); }
+.st-btn.active-mine { background:var(--adim); border-color:var(--aborder); color:var(--accent); }
+.st-btn.active-theirs { background:var(--bdim); border-color:var(--bborder); color:var(--blue); }
+.st-btn.active-split { background:var(--amberdim); border-color:rgba(247,202,69,.3); color:var(--amber); }
+
+/* row action */
+.row-del { width:24px; height:24px; border-radius:6px; background:transparent; border:none; color:var(--text3); cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:all .15s; }
+.row-del:hover { background:var(--rdim); color:var(--red); }
+
+/* add row */
+.add-row-btn { display:flex; align-items:center; gap:8px; width:100%; padding:12px 20px; background:transparent; border:none; color:var(--text3); font-size:12px; cursor:pointer; font-family:var(--ff-b); transition:color .2s; border-top:1px solid var(--border); }
+.add-row-btn:hover { color:var(--text2); background:var(--bg3); }
+
+/* TOTALS BAR */
+.totals-bar { background:var(--bg3); border-top:1px solid var(--border2); padding:16px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.total-group { display:flex; align-items:baseline; gap:6px; }
+.total-lbl { font-size:11px; color:var(--text3); font-family:var(--ff-m); }
+.total-val { font-family:var(--ff-d); font-size:20px; font-weight:300; letter-spacing:-.5px; }
+.total-val.green { color:var(--accent); }
+.total-val.blue { color:var(--blue); }
+
+/* MANUAL ENTRY */
+#tab-manual { display:none; }
+
+/* SUBMIT BAR */
+.submit-bar { position:sticky; bottom:0; z-index:100; background:rgba(12,12,13,0.95); backdrop-filter:blur(16px); border-top:1px solid var(--border); padding:14px 28px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.submit-summary { font-size:12px; color:var(--text3); font-family:var(--ff-m); }
+.submit-summary strong { color:var(--text); }
+.submit-actions { display:flex; gap:8px; }
+
+/* PERSON DROPDOWN MODAL */
+.dropdown-overlay { position:fixed; inset:0; z-index:300; }
+.person-dropdown {
+  position:fixed; z-index:400;
+  background:var(--bg3); border:1px solid var(--border2);
+  border-radius:var(--r); padding:6px; min-width:160px;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+  animation:dropIn .15s ease;
+}
+@keyframes dropIn { from{opacity:0;transform:translateY(-6px);} to{opacity:1;transform:translateY(0);} }
+.pd-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; cursor:pointer; font-size:13px; color:var(--text); transition:background .15s; }
+.pd-item:hover { background:var(--bg4); }
+.pd-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.pd-item.active { color:var(--accent); }
+.pd-divider { height:1px; background:var(--border); margin:4px 0; }
+.pd-item.unassign { color:var(--text3); font-size:12px; }
+
+/* NOTIFICATION TOAST */
+.toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(10px); opacity:0; background:var(--bg4); border:1px solid var(--border2); border-radius:var(--r); padding:10px 20px; font-size:13px; color:var(--text); z-index:500; transition:all .25s; white-space:nowrap; pointer-events:none; }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div style="display:flex; align-items:center; gap:16px;">
+    <a class="nav-logo" href="index.html">
+      <div class="nav-mark">S/</div>
+      <span class="nav-wordmark">SplitTrack</span>
+    </a>
+    <div class="nav-breadcrumb">
+      <a href="index.html">Dashboard</a>
+      <span>›</span>
+      <span style="color:var(--text2);">Add Expense</span>
+    </div>
+  </div>
+  <div class="nav-right">
+    <a href="index.html" class="btn-ghost">← Back</a>
+  </div>
+</nav>
+
+<div class="shell">
+  <div class="page-header">
+    <div class="page-title">Add an <em>expense</em></div>
+    <div class="page-sub">Upload a receipt or type in a transaction manually</div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('receipt')">📸 Upload Receipt</button>
+    <button class="tab" onclick="switchTab('manual')">✏️ Type Manually</button>
+  </div>
+
+  <!-- ═══════ RECEIPT TAB ═══════ -->
+  <div id="tab-receipt">
+
+    <!-- STEP 1: UPLOAD -->
+    <div class="section" id="step1-section">
+      <div class="section-head">
+        <div class="section-title">
+          <span id="step1-badge" class="step-badge">Step 1</span>
+          Upload your receipt
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()" ondragover="onDrag(event,true)" ondragleave="onDrag(event,false)" ondrop="onDrop(event)">
+          <span class="upload-big-icon">📎</span>
+          <div class="upload-label">Drop your receipt here, or click to browse</div>
+          <div class="upload-sub">Works with photos, scanned PDFs, or screenshots</div>
+          <div class="upload-types">
+            <span class="upload-type">JPG</span>
+            <span class="upload-type">PNG</span>
+            <span class="upload-type">PDF</span>
+            <span class="upload-type">HEIC</span>
+            <span class="upload-type">WEBP</span>
+          </div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*,.pdf" onchange="handleFile(this.files[0])">
+        <div style="text-align:center; margin-top:12px;">
+          <button class="btn-ghost" style="font-size:11px;" onclick="loadDemo()">Or load a demo receipt to try the interface →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: SHEET (hidden until file loaded) -->
+    <div class="section" id="step2-section" style="display:none;">
+      <div class="section-head">
+        <div class="section-title">
+          <span id="step2-badge" class="step-badge">Step 2</span>
+          <span id="sheet-title">Receipt items — assign to people</span>
+        </div>
+        <button class="btn-ghost" style="font-size:11px;" onclick="resetUpload()">↩ Re-upload</button>
+      </div>
+
+      <!-- PEOPLE BAR -->
+      <div class="people-bar" id="peopleBar">
+        <span class="people-bar-label">Participants:</span>
+        <!-- ME always first -->
+        <div class="person-pill active" data-pid="me" onclick="toggleParticipant(this)">
+          <div class="pill-dot" style="background:var(--accent);"></div>
+          Me (you)
+        </div>
+        <!-- dynamic people added here -->
+        <button class="add-person-pill" onclick="addParticipant()">+ Add person</button>
+      </div>
+
+      <!-- SPREADSHEET -->
+      <div class="sheet-wrap">
+        <table class="sheet">
+          <thead>
+            <tr>
+              <th style="width:36px;">#</th>
+              <th>Item</th>
+              <th style="width:60px;">Qty</th>
+              <th style="width:100px;">Unit price</th>
+              <th style="width:110px;">Total</th>
+              <th>Assigned to</th>
+              <th style="width:180px;">Split type</th>
+              <th style="width:32px;"></th>
+            </tr>
+          </thead>
+          <tbody id="sheetBody">
+            <!-- rows injected by JS -->
+          </tbody>
+        </table>
+        <button class="add-row-btn" onclick="addRow()">+ Add item row</button>
+      </div>
+
+      <!-- TOTALS -->
+      <div class="totals-bar" id="totalsBar">
+        <div class="total-group"><div class="total-lbl">Receipt total</div><div class="total-val" id="totReceiptTotal">$0.00</div></div>
+        <div class="total-group"><div class="total-lbl">Your share</div><div class="total-val green" id="totMyShare">$0.00</div></div>
+        <div class="total-group"><div class="total-lbl">Owed to you</div><div class="total-val blue" id="totOwed">$0.00</div></div>
+        <div class="total-group"><div class="total-lbl">Unassigned</div><div class="total-val" id="totUnassigned" style="color:var(--text3);">$0.00</div></div>
+      </div>
+    </div>
+
+    <!-- STEP 3: STORE INFO (shown after sheet) -->
+    <div class="section" id="step3-section" style="display:none; animation:fadeUp .4s ease both;">
+      <div class="section-head">
+        <div class="section-title"><span class="step-badge">Step 3</span> Expense details</div>
+      </div>
+      <div class="section-body">
+        <div class="form-grid">
+          <div class="field"><div class="label">Store / Merchant</div><input type="text" id="merchantName" placeholder="e.g. Whole Foods Market"></div>
+          <div class="field"><div class="label">Date of purchase</div><input type="date" id="purchaseDate"></div>
+          <div class="field"><div class="label">Category</div>
+            <select id="category">
+              <option value="">Select category…</option>
+              <option>Groceries</option><option>Dining</option><option>Transport</option>
+              <option>Entertainment</option><option>Health</option><option>Household</option><option>Other</option>
+            </select>
+          </div>
+          <div class="field"><div class="label">Payment method</div>
+            <select id="payMethod">
+              <option value="">Select card…</option>
+              <option>Chase Sapphire •••• 4821</option>
+              <option>Amex Gold •••• 3309</option>
+              <option>Cash</option><option>Other</option>
+            </select>
+          </div>
+          <div class="field field-full"><div class="label">Notes (optional)</div><textarea id="notes" placeholder="e.g. birthday dinner for Sarah, weekly groceries…"></textarea></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-receipt -->
+
+  <!-- ═══════ MANUAL TAB ═══════ -->
+  <div id="tab-manual">
+    <div class="section">
+      <div class="section-head"><div class="section-title">Transaction details</div></div>
+      <div class="section-body">
+        <div class="form-grid-3" style="margin-bottom:14px;">
+          <div class="field field-full" style="grid-column:1/-1;"><div class="label">Description</div><input type="text" id="m-desc" placeholder="e.g. Dinner at Nobu, Gas fill-up…"></div>
+          <div class="field"><div class="label">Total amount ($)</div><input type="number" id="m-amount" placeholder="0.00" step="0.01" min="0" oninput="manualCalc()"></div>
+          <div class="field"><div class="label">Date</div><input type="date" id="m-date"></div>
+          <div class="field"><div class="label">Category</div>
+            <select id="m-cat">
+              <option value="">Category…</option>
+              <option>Groceries</option><option>Dining</option><option>Transport</option>
+              <option>Entertainment</option><option>Health</option><option>Other</option>
+            </select>
+          </div>
+          <div class="field"><div class="label">Payment method</div>
+            <select id="m-card">
+              <option value="">Card…</option>
+              <option>Chase Sapphire •••• 4821</option>
+              <option>Amex Gold •••• 3309</option>
+              <option>Cash</option>
+            </select>
+          </div>
+          <div class="field"><div class="label">Split with</div>
+            <select id="m-split" onchange="manualCalc()">
+              <option value="mine">Just me</option>
+              <option value="equal2">Split equally · 2 people</option>
+              <option value="equal3">Split equally · 3 people</option>
+              <option value="equal4">Split equally · 4 people</option>
+              <option value="custom">Custom amounts</option>
+            </select>
+          </div>
+          <div class="field"><div class="label">Your share</div><input type="text" id="m-share" placeholder="$0.00" readonly style="color:var(--accent); font-family:var(--ff-m);"></div>
+          <div class="field field-full" style="grid-column:1/-1;"><div class="label">Notes</div><textarea id="m-notes" placeholder="Optional note…" style="min-height:50px;"></textarea></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /shell -->
+
+<!-- SUBMIT BAR -->
+<div class="submit-bar">
+  <div class="submit-summary" id="submitSummary">Fill in the expense details above to save.</div>
+  <div class="submit-actions">
+    <a href="index.html" class="btn-ghost">Cancel</a>
+    <button class="btn-accent" id="saveBtn" onclick="saveExpense()">Save expense →</button>
+  </div>
+</div>
+
+<!-- PERSON DROPDOWN (hidden, positioned by JS) -->
+<div id="dropdownOverlay" class="dropdown-overlay" style="display:none;" onclick="closeDropdown()"></div>
+<div id="personDropdown" class="person-dropdown" style="display:none;"></div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── PEOPLE STATE ──
+const PEOPLE = [
+  { id:'me',    name:'Me (you)',  color:'#C8F55A', textColor:'#0C0C0D' },
+  { id:'p1',    name:'Sarah L.', color:'#6B9FFF', textColor:'#0C0C0D' },
+  { id:'p2',    name:'Marcus J.',color:'#3ED9C8', textColor:'#0C0C0D' },
+];
+let participants = ['me']; // active participant IDs
+let nextPID = 10;
+
+// ── ROWS STATE ──
+let rows = [];
+let activeDropdownRowId = null;
+let activeDropdownField = null; // 'assignee'
+
+// ── TABS ──
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active', (i===0&&t==='receipt')||(i===1&&t==='manual')));
+  document.getElementById('tab-receipt').style.display = t==='receipt'?'block':'none';
+  document.getElementById('tab-manual').style.display = t==='manual'?'block':'none';
+  updateSubmitBar();
+}
+
+// ── DRAG & DROP ──
+function onDrag(e, on) { e.preventDefault(); document.getElementById('dropZone').classList.toggle('drag', on); }
+function onDrop(e) { e.preventDefault(); onDrag(e, false); const f=e.dataTransfer.files[0]; if(f) handleFile(f); }
+
+// ── FILE HANDLING ──
+function handleFile(file) {
+  if (!file) return;
+  showToast('Reading receipt… (demo mode: sample data loaded)');
+  setTimeout(() => {
+    document.getElementById('step1-section').style.display = 'none';
+    document.getElementById('step2-section').style.display = 'block';
+    document.getElementById('step3-section').style.display = 'block';
+    document.getElementById('step2-badge').classList.add('done');
+    document.getElementById('sheet-title').textContent = 'Receipt items — ' + file.name;
+    loadDemoItems();
+    updatePeopleBar();
+    updateTotals();
+    document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0];
+  }, 900);
+}
+
+function loadDemo() {
+  document.getElementById('step1-section').style.display = 'none';
+  document.getElementById('step2-section').style.display = 'block';
+  document.getElementById('step3-section').style.display = 'block';
+  document.getElementById('step2-badge').classList.add('done');
+  document.getElementById('sheet-title').textContent = 'Receipt items — Whole Foods Market (demo)';
+  document.getElementById('merchantName').value = 'Whole Foods Market';
+  document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('category').value = 'Groceries';
+  loadDemoItems();
+  updatePeopleBar();
+  updateTotals();
+  showToast('Demo receipt loaded!');
+}
+
+function loadDemoItems() {
+  rows = [
+    { id:1, name:'Organic Whole Milk (1 gal)', qty:2, unitPrice:4.99, assignees:[], splitType:'mine' },
+    { id:2, name:'Sourdough Bread',             qty:1, unitPrice:6.49, assignees:[], splitType:'mine' },
+    { id:3, name:'Sparkling Water 12pk',        qty:1, unitPrice:14.99, assignees:[], splitType:'mine' },
+    { id:4, name:'Penne Pasta',                 qty:3, unitPrice:2.49, assignees:[], splitType:'mine' },
+    { id:5, name:'Marinara Sauce',              qty:2, unitPrice:3.99, assignees:[], splitType:'mine' },
+    { id:6, name:'Chicken Breast (2.3 lb)',     qty:1, unitPrice:17.20, assignees:[], splitType:'mine' },
+    { id:7, name:'Greek Yogurt (32oz)',         qty:2, unitPrice:5.49, assignees:[], splitType:'mine' },
+    { id:8, name:'Baby Spinach 5oz',            qty:1, unitPrice:3.99, assignees:[], splitType:'mine' },
+  ];
+  renderSheet();
+}
+
+function resetUpload() {
+  rows = [];
+  document.getElementById('step1-section').style.display = 'block';
+  document.getElementById('step2-section').style.display = 'none';
+  document.getElementById('step3-section').style.display = 'none';
+  document.getElementById('step2-badge').classList.remove('done');
+  document.getElementById('fileInput').value = '';
+  updateSubmitBar();
+}
+
+// ── RENDER SHEET ──
+function renderSheet() {
+  const tbody = document.getElementById('sheetBody');
+  tbody.innerHTML = '';
+  rows.forEach((row, idx) => {
+    const total = (row.qty * row.unitPrice).toFixed(2);
+    const tr = document.createElement('tr');
+    if (row.splitType === 'mine') tr.classList.add('row-me');
+
+    // assignee badges HTML
+    let assigneeHTML = '';
+    if (row.assignees.length === 0) {
+      assigneeHTML = `<span class="assignee-badge unset" onclick="openDropdown(event,${row.id},'assignee')">+ assign</span>`;
+    } else {
+      row.assignees.forEach(pid => {
+        const p = getPerson(pid);
+        if (!p) return;
+        assigneeHTML += `<span class="assignee-badge" style="background:${hexDim(p.color)};border-color:${hexDim(p.color,true)};color:${p.color};" onclick="openDropdown(event,${row.id},'assignee')">
+          <span class="ab-dot" style="background:${p.color};"></span>${p.name}
+        </span>`;
+      });
+      assigneeHTML += `<span class="assignee-badge unset" onclick="openDropdown(event,${row.id},'assignee')" style="font-size:10px;">+</span>`;
+    }
+
+    // split type buttons
+    const stMine   = row.splitType==='mine'    ? 'active-mine'   : '';
+    const stTheirs = row.splitType==='theirs'  ? 'active-theirs' : '';
+    const stSplit  = row.splitType==='split'   ? 'active-split'  : '';
+
+    tr.innerHTML = `
+      <td class="row-num">${idx+1}</td>
+      <td class="item-name-cell">
+        <input type="text" value="${escHtml(row.name)}" style="background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:2px 0;width:100%;font-weight:500;" 
+          onfocus="this.style.borderBottomColor='var(--border2)'" 
+          onblur="this.style.borderBottomColor='transparent'; updateRowName(${row.id},this.value)">
+      </td>
+      <td class="item-qty"><input type="number" value="${row.qty}" min="1" style="width:50px;background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:2px 0;text-align:center;font-family:var(--ff-m);font-size:12px;" onfocus="this.style.borderBottomColor='var(--border2)'" onblur="this.style.borderBottomColor='transparent'; updateRowQty(${row.id},this.value)"></td>
+      <td class="item-price">
+        <span style="color:var(--text3);font-size:11px;">$</span>
+        <input type="number" value="${row.unitPrice.toFixed(2)}" min="0" step="0.01" style="width:70px;background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:2px 0;font-family:var(--ff-m);" onfocus="this.style.borderBottomColor='var(--border2)'" onblur="this.style.borderBottomColor='transparent'; updateRowPrice(${row.id},this.value)">
+      </td>
+      <td class="item-price ${row.splitType==='split'?'split':''}">$${total}</td>
+      <td><div class="assignee-cell">${assigneeHTML}</div></td>
+      <td>
+        <div class="split-toggle">
+          <button class="st-btn ${stMine}"   onclick="setSplitType(${row.id},'mine')">Mine</button>
+          <button class="st-btn ${stTheirs}" onclick="setSplitType(${row.id},'theirs')">Theirs</button>
+          <button class="st-btn ${stSplit}"  onclick="setSplitType(${row.id},'split')">Split</button>
+        </div>
+      </td>
+      <td><button class="row-del" onclick="deleteRow(${row.id})" title="Remove row">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  updateTotals();
+  updateSubmitBar();
+}
+
+// ── ROW MUTATIONS ──
+function updateRowName(id, val)  { const r=rows.find(r=>r.id===id); if(r){r.name=val;} }
+function updateRowQty(id, val)   { const r=rows.find(r=>r.id===id); if(r){r.qty=Math.max(1,parseFloat(val)||1);} renderSheet(); }
+function updateRowPrice(id, val) { const r=rows.find(r=>r.id===id); if(r){r.unitPrice=Math.max(0,parseFloat(val)||0);} renderSheet(); }
+function setSplitType(id, type)  { const r=rows.find(r=>r.id===id); if(r){r.splitType=type;} renderSheet(); }
+function deleteRow(id)           { rows=rows.filter(r=>r.id!==id); renderSheet(); }
+
+function addRow() {
+  rows.push({ id: Date.now(), name:'New item', qty:1, unitPrice:0, assignees:[], splitType:'mine' });
+  renderSheet();
+  setTimeout(()=>{ const inputs=document.querySelectorAll('.item-name-cell input'); if(inputs.length) inputs[inputs.length-1].focus(); },50);
+}
+
+// ── TOTALS ──
+function updateTotals() {
+  let receipt=0, mine=0, owed=0, unassigned=0;
+  rows.forEach(r => {
+    const total = r.qty * r.unitPrice;
+    receipt += total;
+    if (r.splitType === 'mine') mine += total;
+    else if (r.splitType === 'theirs') owed += total;
+    else if (r.splitType === 'split') { mine += total/2; owed += total/2; }
+    if (r.assignees.length === 0 && r.splitType !== 'mine') unassigned += total;
+  });
+  document.getElementById('totReceiptTotal').textContent = '$' + receipt.toFixed(2);
+  document.getElementById('totMyShare').textContent      = '$' + mine.toFixed(2);
+  document.getElementById('totOwed').textContent         = '$' + owed.toFixed(2);
+  document.getElementById('totUnassigned').textContent   = '$' + unassigned.toFixed(2);
+}
+
+// ── PEOPLE BAR ──
+function updatePeopleBar() {
+  const bar = document.getElementById('peopleBar');
+  // clear all except label and add-btn
+  Array.from(bar.querySelectorAll('.person-pill')).forEach(el=>el.remove());
+  PEOPLE.filter(p=>p.id==='me'||participants.includes(p.id)).forEach(p=>{
+    const pill = document.createElement('div');
+    pill.className = 'person-pill' + (participants.includes(p.id)?' active':'');
+    pill.dataset.pid = p.id;
+    pill.innerHTML = `<div class="pill-dot" style="background:${p.color};"></div>${p.name}`;
+    pill.onclick = () => toggleParticipant(pill);
+    bar.insertBefore(pill, bar.querySelector('.add-person-pill'));
+  });
+}
+
+function toggleParticipant(pill) {
+  const pid = pill.dataset.pid;
+  if (pid === 'me') return; // can't remove self
+  if (participants.includes(pid)) {
+    participants = participants.filter(x=>x!==pid);
+    pill.classList.remove('active');
+  } else {
+    participants.push(pid);
+    pill.classList.add('active');
+  }
+}
+
+function addParticipant() {
+  const name = prompt('Enter person\'s name:');
+  if (!name || !name.trim()) return;
+  const colors = ['#6B9FFF','#3ED9C8','#F7CA45','#FF6E6E','#C084FC','#FB923C'];
+  const color = colors[PEOPLE.length % colors.length];
+  const pid = 'p' + (++nextPID);
+  PEOPLE.push({ id:pid, name:name.trim(), color, textColor:'#0C0C0D' });
+  participants.push(pid);
+  updatePeopleBar();
+  showToast('"' + name.trim() + '" added as a participant');
+}
+
+// ── DROPDOWN ──
+function openDropdown(e, rowId, field) {
+  e.stopPropagation();
+  activeDropdownRowId = rowId;
+  activeDropdownField = field;
+  const row = rows.find(r=>r.id===rowId);
+  const dd = document.getElementById('personDropdown');
+  const overlay = document.getElementById('dropdownOverlay');
+
+  let html = '';
+  PEOPLE.filter(p=>participants.includes(p.id)||p.id==='me').forEach(p=>{
+    const isActive = row.assignees.includes(p.id);
+    html += `<div class="pd-item${isActive?' active':''}" onclick="toggleAssignee(${rowId},'${p.id}')">
+      <span class="pd-dot" style="background:${p.color};"></span>
+      ${p.name} ${isActive?'✓':''}
+    </div>`;
+  });
+  html += '<div class="pd-divider"></div>';
+  html += `<div class="pd-item unassign" onclick="clearAssignees(${rowId})">✕ Clear assignment</div>`;
+  dd.innerHTML = html;
+
+  const rect = e.currentTarget.getBoundingClientRect();
+  dd.style.top = (rect.bottom + 6 + window.scrollY) + 'px';
+  dd.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
+  dd.style.display = 'block';
+  overlay.style.display = 'block';
+}
+
+function toggleAssignee(rowId, pid) {
+  const row = rows.find(r=>r.id===rowId);
+  if (!row) return;
+  if (row.assignees.includes(pid)) {
+    row.assignees = row.assignees.filter(x=>x!==pid);
+  } else {
+    row.assignees.push(pid);
+    // auto set split type based on assignee
+    if (pid === 'me' && row.assignees.length === 1) row.splitType = 'mine';
+    else if (pid !== 'me' && row.assignees.length === 1) row.splitType = 'theirs';
+    else row.splitType = 'split';
+  }
+  closeDropdown();
+  renderSheet();
+}
+
+function clearAssignees(rowId) {
+  const row = rows.find(r=>r.id===rowId);
+  if (row) { row.assignees = []; row.splitType = 'mine'; }
+  closeDropdown();
+  renderSheet();
+}
+
+function closeDropdown() {
+  document.getElementById('personDropdown').style.display = 'none';
+  document.getElementById('dropdownOverlay').style.display = 'none';
+}
+
+// ── MANUAL CALC ──
+function manualCalc() {
+  const amt = parseFloat(document.getElementById('m-amount').value) || 0;
+  const split = document.getElementById('m-split').value;
+  let share = amt;
+  if (split==='equal2') share = amt/2;
+  else if (split==='equal3') share = amt/3;
+  else if (split==='equal4') share = amt/4;
+  document.getElementById('m-share').value = '$' + share.toFixed(2);
+  updateSubmitBar();
+}
+
+// ── SUBMIT BAR ──
+function updateSubmitBar() {
+  const tab = document.querySelector('.tab.active').textContent.includes('Upload') ? 'receipt' : 'manual';
+  let summary = 'Fill in the expense details above to save.';
+  if (tab === 'receipt' && rows.length > 0) {
+    let total = rows.reduce((s,r)=>s+r.qty*r.unitPrice,0);
+    summary = `<strong>${rows.length} items</strong> · Receipt total: <strong>$${total.toFixed(2)}</strong>`;
+  } else if (tab === 'manual') {
+    const amt = document.getElementById('m-amount').value;
+    const desc = document.getElementById('m-desc').value;
+    if (amt && desc) summary = `<strong>${desc}</strong> · <strong>$${parseFloat(amt).toFixed(2)}</strong>`;
+  }
+  document.getElementById('submitSummary').innerHTML = summary;
+}
+
+// ── SAVE ──
+function saveExpense() {
+  const tab = document.querySelector('.tab.active').textContent.includes('Upload') ? 'receipt' : 'manual';
+  if (tab === 'receipt') {
+    if (rows.length === 0) { showToast('No items to save. Upload a receipt or load the demo.'); return; }
+    const merchant = document.getElementById('merchantName').value || 'Unknown merchant';
+    const total = rows.reduce((s,r)=>s+r.qty*r.unitPrice,0);
+    showToast('Expense saved! Redirecting to dashboard…');
+    setTimeout(()=>{ window.location.href='index.html'; },1400);
+  } else {
+    const desc = document.getElementById('m-desc').value;
+    const amt = document.getElementById('m-amount').value;
+    if (!desc || !amt) { showToast('Please enter a description and amount.'); return; }
+    showToast('Expense saved! Redirecting to dashboard…');
+    setTimeout(()=>{ window.location.href='index.html'; },1400);
+  }
+}
+
+// ── UTILS ──
+function getPerson(pid) { return PEOPLE.find(p=>p.id===pid); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function hexDim(hex, border=false) {
+  const alpha = border ? '0.25' : '0.1';
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+// ── INIT ──
+document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0];
+document.getElementById('m-date').value = new Date().toISOString().split('T')[0];
+updatePeopleBar();
+updateSubmitBar();
+</script>
+</body>
+</html>
