@@ -7,6 +7,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- ── SUPABASE SDK (Step 3) ── -->
+<script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+  }
+}
+</script>
+<script type="module" src="supabase.js"></script>
+<!-- ─────────────────────────── -->
+
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -108,8 +120,8 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   </a>
   <div class="nav-right">
     <a class="nav-user" href="login.html">
-      <div class="nav-avatar">YO</div>
-      Your account
+      <div class="nav-avatar" id="navAvatar">YO</div>
+      <span id="navName">Your account</span>
     </a>
     <a class="nav-cta" href="expenses.html">+ Add expense</a>
   </div>
@@ -117,13 +129,13 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 
 <div class="shell">
   <div class="page-header">
-    <div class="greeting">Good morning, <em>let's get started.</em></div>
-    <div class="subgreet">No expenses logged yet · May 2026</div>
+    <div class="greeting">Good morning, <em id="greetName">let's get started.</em></div>
+    <div class="subgreet" id="subgreet">No expenses logged yet · May 2026</div>
   </div>
 
   <div class="security-bar">
     <div class="sec-dot"></div>
-    <span>Session is encrypted and secure. Transactions are stored locally until you connect a backend.</span>
+    <span id="secMsg">Session is encrypted and secure. Transactions are stored locally until you connect a backend.</span>
   </div>
 
   <div class="stat-strip">
@@ -197,18 +209,56 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   <div class="foot-r">
     <a class="foot-link" href="#">Settings</a>
     <a class="foot-link" href="#">Export</a>
-    <a class="foot-link" href="login.html">Sign out</a>
+    <a class="foot-link" href="#" onclick="signOut(); return false;">Sign out</a>
   </div>
 </footer>
 
-<script>
-function addFriend(){
-  const n=prompt('Enter person\'s name:');
-  if(n&&n.trim()) alert('"'+n.trim()+'" added! They\'ll be selectable when you split expenses.');
-}
-function connectBank(){
-  alert('Bank connection via Plaid is coming in the next build.\nFor now add expenses manually or by uploading a receipt.');
-}
+<!-- ── PAGE LOGIC (module so it can import supabase) ── -->
+<script type="module">
+  import { supabase } from './supabase.js'
+
+  // ── GUARD: redirect to login if no session ──
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    window.location.href = 'login.html'
+  }
+
+  // ── POPULATE UI with real user info ──
+  if (session?.user) {
+    const meta      = session.user.user_metadata || {}
+    const fullName  = meta.full_name || session.user.email || 'there'
+    const initials  = fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    const hour      = new Date().getHours()
+    const tod       = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+    const firstName = fullName.split(' ')[0]
+
+    document.getElementById('greetName').textContent  = firstName + '.'
+    document.getElementById('subgreet').textContent   =
+      'No expenses logged yet · ' + new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' })
+    document.getElementById('navName').textContent    = firstName
+    document.getElementById('navAvatar').textContent  = initials
+    document.querySelector('.greeting').innerHTML     =
+      'Good ' + tod + ', <em id="greetName">' + firstName + '.</em>'
+    document.getElementById('secMsg').textContent     =
+      'Signed in as ' + session.user.email + ' · Session encrypted and secure.'
+  }
+
+  // ── SIGN OUT ──
+  window.signOut = async function () {
+    await supabase.auth.signOut()
+    window.location.href = 'login.html'
+  }
+
+  // ── ADD FRIEND (placeholder until contacts table is built) ──
+  window.addFriend = function () {
+    const n = prompt('Enter person\'s name:')
+    if (n && n.trim()) alert('"' + n.trim() + '" added! They\'ll be selectable when you split expenses.')
+  }
+
+  window.connectBank = function () {
+    alert('Bank connection via Plaid is coming in the next build.\nFor now add expenses manually or by uploading a receipt.')
+  }
 </script>
+
 </body>
 </html>
