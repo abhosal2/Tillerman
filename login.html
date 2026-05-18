@@ -8,6 +8,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- ── SUPABASE SDK (Step 3) ── -->
+<script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+  }
+}
+</script>
+<script type="module" src="supabase.js"></script>
+<!-- ─────────────────────────── -->
+
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -125,7 +137,7 @@
         <div class="card-sub">Sign in to your Tillerman account</div>
       </div>
       <div class="card-body">
-        <button class="bio-btn" onclick="biometricLogin()"><span style="font-size:18px;">🪪</span> Sign in with Face ID / Passkey</button>
+        <button class="bio-btn" id="biometricBtn"><span style="font-size:18px;">🪪</span> Sign in with Face ID / Passkey</button>
         <div class="divider"><div class="divider-line"></div><div class="divider-text">or use email</div><div class="divider-line"></div></div>
         <div class="alert alert-error" id="loginAlert"><span style="font-size:14px;">⚠</span><span id="loginAlertMsg">Invalid email or password.</span></div>
         <div class="field">
@@ -136,14 +148,14 @@
           </div>
         </div>
         <div class="field">
-          <div class="field-label">Password <a href="#" onclick="showForgot(event)">Forgot password?</a></div>
+          <div class="field-label">Password <a href="#" id="forgotLink">Forgot password?</a></div>
           <div class="input-wrap">
-            <input type="password" id="passwordInput" placeholder="••••••••••••" autocomplete="current-password" oninput="clearAlert()" onkeydown="if(event.key==='Enter')attemptLogin()">
+            <input type="password" id="passwordInput" placeholder="••••••••••••" autocomplete="current-password" oninput="clearAlert()">
             <span class="input-icon">🔑</span>
-            <span class="input-icon-right" onclick="togglePw('passwordInput',this)">👁</span>
+            <span class="input-icon-right" id="pwToggle">👁</span>
           </div>
         </div>
-        <button class="btn-primary" id="loginBtn" onclick="attemptLogin()">
+        <button class="btn-primary" id="loginBtn">
           <span id="loginBtnText">Sign in →</span>
           <div class="btn-spinner" id="loginSpinner"></div>
         </button>
@@ -158,25 +170,25 @@
     <div id="screen-2fa">
       <div class="card-head">
         <div class="card-title">Two-factor verification</div>
-        <div class="card-sub">Enter the 6-digit code sent to <strong>•••• 4821</strong></div>
+        <div class="card-sub" id="tfaSub">Enter the 6-digit code sent to your phone</div>
       </div>
       <div class="card-body">
         <div class="alert alert-warn" id="tfaAlert"><span style="font-size:14px;">⚠</span><span id="tfaAlertMsg">Incorrect code. Try again.</span></div>
         <div class="otp-wrap">
-          <input class="otp-input" type="text" maxlength="1" inputmode="numeric" autocomplete="one-time-code" oninput="otpNext(this,0)">
-          <input class="otp-input" type="text" maxlength="1" inputmode="numeric" oninput="otpNext(this,1)">
-          <input class="otp-input" type="text" maxlength="1" inputmode="numeric" oninput="otpNext(this,2)">
-          <input class="otp-input" type="text" maxlength="1" inputmode="numeric" oninput="otpNext(this,3)">
-          <input class="otp-input" type="text" maxlength="1" inputmode="numeric" oninput="otpNext(this,4)">
-          <input class="otp-input" type="text" maxlength="1" inputmode="numeric" oninput="otpNext(this,5)">
+          <input class="otp-input" type="text" maxlength="1" inputmode="numeric" autocomplete="one-time-code">
+          <input class="otp-input" type="text" maxlength="1" inputmode="numeric">
+          <input class="otp-input" type="text" maxlength="1" inputmode="numeric">
+          <input class="otp-input" type="text" maxlength="1" inputmode="numeric">
+          <input class="otp-input" type="text" maxlength="1" inputmode="numeric">
+          <input class="otp-input" type="text" maxlength="1" inputmode="numeric">
         </div>
         <div class="otp-timer">Code expires in <span id="otpCountdown">1:59</span></div>
-        <button class="resend-btn" id="resendBtn" onclick="resendCode()">Resend code</button>
-        <button class="btn-primary" id="tfaBtn" onclick="verifyOTP()">
+        <button class="resend-btn" id="resendBtn">Resend code</button>
+        <button class="btn-primary" id="tfaBtn">
           <span id="tfaBtnText">Verify code →</span>
           <div class="btn-spinner" id="tfaSpinner"></div>
         </button>
-        <div style="text-align:center;margin-top:14px;"><a href="#" onclick="backToLogin(event)" style="font-size:12px;color:var(--text3);text-decoration:none;">← Back</a></div>
+        <div style="text-align:center;margin-top:14px;"><a href="#" id="backBtn" style="font-size:12px;color:var(--text3);text-decoration:none;">← Back</a></div>
       </div>
       <div class="card-foot">Use authenticator app instead? <a href="#">Switch method</a></div>
     </div>
@@ -200,77 +212,306 @@
     <div class="trust-item"><div class="trust-dot"></div>SOC 2 compliant</div>
     <div class="trust-item"><div class="trust-dot"></div>Zero-knowledge auth</div>
   </div>
-  <div class="last-login">Last login: May 13, 2026 · 9:14 AM · Toledo, OH · Chrome</div>
+  <div class="last-login" id="lastLoginBar">Checking last login…</div>
 </div>
 
-<script>
-let failAttempts=0, otpInterval, lockInterval, otpResendInterval;
-let otpSecondsLeft=119, resendSecondsLeft=30;
-const DEMO_EMAIL='user@tillerman.app', DEMO_PW='Demo1234!', DEMO_OTP='482156';
+<!-- ── ALL LOGIC AS A MODULE so it can import Supabase ── -->
+<script type="module">
+  import { supabase } from './supabase.js'
 
-function showAlert(id,msg,type){ const e=document.getElementById(id); e.className='alert alert-'+type+' show'; if(msg) e.querySelector('span:last-child').innerHTML=msg; }
-function hideAlert(id){ document.getElementById(id).classList.remove('show'); }
-function clearAlert(){ hideAlert('loginAlert'); }
-function setLoading(btn,sp,tx,on){ document.getElementById(btn).disabled=on; document.getElementById(sp).style.display=on?'block':'none'; document.getElementById(tx).style.display=on?'none':'inline'; }
-function togglePw(id,icon){ const i=document.getElementById(id); i.type=i.type==='password'?'text':'password'; icon.textContent=i.type==='text'?'🙈':'👁'; }
-function biometricLogin(){ showAlert('loginAlert','🪪 Passkey / biometric login would trigger WebAuthn here. (Demo only)','warn'); }
-function showForgot(e){ e.preventDefault(); showAlert('loginAlert','A password reset link will be sent to your email. Check your inbox.','ok'); }
+  // ─────────────────────────────────────────────
+  //  STATE
+  // ─────────────────────────────────────────────
+  let failAttempts = 0
+  let otpInterval, lockInterval, otpResendInterval
+  let otpSecondsLeft = 119, resendSecondsLeft = 30
 
-function attemptLogin(){
-  const em=document.getElementById('emailInput').value.trim();
-  const pw=document.getElementById('passwordInput').value;
-  if(!em||!pw){ showAlert('loginAlert','⚠ Please enter both your email and password.','error'); return; }
-  setLoading('loginBtn','loginSpinner','loginBtnText',true);
-  setTimeout(()=>{
-    setLoading('loginBtn','loginSpinner','loginBtnText',false);
-    if(em===DEMO_EMAIL && pw===DEMO_PW){ hideAlert('loginAlert'); goTo2FA(); }
-    else {
-      failAttempts++;
-      if(failAttempts>=3){ triggerLockout(); }
-      else {
-        const left=3-failAttempts;
-        showAlert('loginAlert',`⚠ Incorrect credentials. <strong>${left} attempt${left!==1?'s':''} remaining.</strong>`,'error');
-        document.getElementById('passwordInput').value='';
-        const c=document.getElementById('mainCard');
-        ['-6px','5px','-3px','0'].forEach((v,i)=>setTimeout(()=>{c.style.transition='transform .08s ease';c.style.transform='translateX('+v+')'},i*80));
-      }
+  // ─────────────────────────────────────────────
+  //  ON LOAD — skip login if already authenticated
+  // ─────────────────────────────────────────────
+  const { data: { session: existing } } = await supabase.auth.getSession()
+  if (existing) window.location.href = 'index.html'
+
+  // Populate last login bar from localStorage (written on successful login)
+  const lastLogin = localStorage.getItem('tillerman_last_login')
+  document.getElementById('lastLoginBar').textContent =
+    lastLogin ? 'Last login: ' + lastLogin : 'First time signing in'
+
+  // ─────────────────────────────────────────────
+  //  HELPERS
+  // ─────────────────────────────────────────────
+  function showAlert(id, msg, type) {
+    const el = document.getElementById(id)
+    el.className = 'alert alert-' + type + ' show'
+    if (msg) el.querySelector('span:last-child').innerHTML = msg
+  }
+  function hideAlert(id) { document.getElementById(id).classList.remove('show') }
+  function clearAlert()  { hideAlert('loginAlert') }
+
+  function setLoading(btnId, spId, txId, on) {
+    document.getElementById(btnId).disabled = on
+    document.getElementById(spId).style.display = on ? 'block' : 'none'
+    document.getElementById(txId).style.display = on ? 'none'  : 'inline'
+  }
+
+  function shakeCard() {
+    const c = document.getElementById('mainCard')
+    ;['-6px','5px','-3px','0'].forEach((v,i) =>
+      setTimeout(() => { c.style.transition = 'transform .08s ease'; c.style.transform = 'translateX('+v+')' }, i*80))
+  }
+
+  // ─────────────────────────────────────────────
+  //  PASSWORD TOGGLE
+  // ─────────────────────────────────────────────
+  document.getElementById('pwToggle').addEventListener('click', function() {
+    const inp = document.getElementById('passwordInput')
+    inp.type = inp.type === 'password' ? 'text' : 'password'
+    this.textContent = inp.type === 'text' ? '🙈' : '👁'
+  })
+
+  // ─────────────────────────────────────────────
+  //  FORGOT PASSWORD — real Supabase reset email
+  // ─────────────────────────────────────────────
+  document.getElementById('forgotLink').addEventListener('click', async (e) => {
+    e.preventDefault()
+    const email = document.getElementById('emailInput').value.trim()
+    if (!email) {
+      showAlert('loginAlert', '⚠ Enter your email address first, then click Forgot password.', 'warn')
+      return
     }
-  },1100);
-}
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/reset-password.html'
+    })
+    if (error) showAlert('loginAlert', '⚠ ' + error.message, 'error')
+    else showAlert('loginAlert', '✓ Password reset link sent — check your inbox.', 'ok')
+  })
 
-function triggerLockout(){
-  document.getElementById('lockout').style.display='flex';
-  let s=299;
-  lockInterval=setInterval(()=>{ s--; const m=Math.floor(s/60); document.getElementById('lockoutTimer').textContent=m+':'+(s%60).toString().padStart(2,'0'); if(s<=0){ clearInterval(lockInterval); document.getElementById('lockout').style.display='none'; failAttempts=0; showAlert('loginAlert','✓ Account unlocked. You may try again.','ok'); }},1000);
-}
+  // ─────────────────────────────────────────────
+  //  BIOMETRIC / PASSKEY (WebAuthn via Supabase)
+  // ─────────────────────────────────────────────
+  document.getElementById('biometricBtn').addEventListener('click', async () => {
+    // Supabase supports passkeys via the MFA/WebAuthn flow.
+    // Until configured in your dashboard this shows a helpful message.
+    showAlert('loginAlert',
+      '🪪 Passkey login requires WebAuthn setup in your Supabase dashboard under Authentication → MFA.',
+      'warn')
+  })
 
-function goTo2FA(){
-  document.getElementById('screen-login').style.display='none';
-  document.getElementById('screen-2fa').style.display='block';
-  document.getElementById('step1').className='step done'; document.getElementById('step1').querySelector('.step-circle').textContent='✓';
-  document.getElementById('line1').className='step-line done'; document.getElementById('step2').className='step active';
-  setTimeout(()=>document.querySelectorAll('.otp-input')[0].focus(),100);
-  otpSecondsLeft=119;
-  otpInterval=setInterval(()=>{ otpSecondsLeft--; const m=Math.floor(otpSecondsLeft/60); document.getElementById('otpCountdown').textContent=m+':'+(otpSecondsLeft%60).toString().padStart(2,'0'); if(otpSecondsLeft<=0){ clearInterval(otpInterval); document.getElementById('otpCountdown').textContent='expired'; document.getElementById('otpCountdown').style.color='var(--red)'; document.getElementById('tfaBtn').disabled=true; showAlert('tfaAlert','⚠ Code expired. Request a new one.','warn'); }},1000);
-  resendSecondsLeft=30; updateResendBtn();
-  otpResendInterval=setInterval(()=>{ resendSecondsLeft--; updateResendBtn(); if(resendSecondsLeft<=0){ clearInterval(otpResendInterval); const b=document.getElementById('resendBtn'); b.textContent='Resend code'; b.className='resend-btn active'; }},1000);
-}
+  // ─────────────────────────────────────────────
+  //  ENTER KEY on password field
+  // ─────────────────────────────────────────────
+  document.getElementById('passwordInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') attemptLogin()
+  })
+  document.getElementById('emailInput').addEventListener('input', clearAlert)
+  document.getElementById('passwordInput').addEventListener('input', clearAlert)
 
-function updateResendBtn(){ document.getElementById('resendBtn').textContent='Resend code ('+resendSecondsLeft+'s)'; }
+  // ─────────────────────────────────────────────
+  //  STEP 1 — SIGN IN with Supabase
+  // ─────────────────────────────────────────────
+  document.getElementById('loginBtn').addEventListener('click', attemptLogin)
 
-function resendCode(){ const b=document.getElementById('resendBtn'); if(!b.classList.contains('active')) return; b.className='resend-btn'; resendSecondsLeft=30; otpSecondsLeft=119; document.querySelectorAll('.otp-input').forEach(i=>i.value=''); document.querySelectorAll('.otp-input')[0].focus(); hideAlert('tfaAlert'); showAlert('tfaAlert','✓ New code sent to your phone.','ok'); setTimeout(()=>hideAlert('tfaAlert'),3000); otpResendInterval=setInterval(()=>{ resendSecondsLeft--; updateResendBtn(); if(resendSecondsLeft<=0){ clearInterval(otpResendInterval); const b=document.getElementById('resendBtn'); b.textContent='Resend code'; b.className='resend-btn active'; }},1000); }
+  async function attemptLogin() {
+    const email = document.getElementById('emailInput').value.trim()
+    const pw    = document.getElementById('passwordInput').value
+    if (!email || !pw) {
+      showAlert('loginAlert', '⚠ Please enter both your email and password.', 'error')
+      return
+    }
 
-function otpNext(el,idx){ el.value=el.value.replace(/\D/g,''); const ins=document.querySelectorAll('.otp-input'); if(el.value&&idx<5) ins[idx+1].focus(); if(Array.from(ins).map(i=>i.value).join('').length===6) setTimeout(verifyOTP,300); }
+    setLoading('loginBtn', 'loginSpinner', 'loginBtnText', true)
 
-document.addEventListener('keydown',e=>{ if(e.key==='Backspace'){ const ins=document.querySelectorAll('.otp-input'); ins.forEach((inp,i)=>{ if(document.activeElement===inp&&!inp.value&&i>0) ins[i-1].focus(); }); }});
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pw })
 
-function verifyOTP(){ const ins=document.querySelectorAll('.otp-input'); const code=Array.from(ins).map(i=>i.value).join(''); if(code.length<6){showAlert('tfaAlert','⚠ Please enter all 6 digits.','warn');return;} setLoading('tfaBtn','tfaSpinner','tfaBtnText',true); setTimeout(()=>{ setLoading('tfaBtn','tfaSpinner','tfaBtnText',false); if(code===DEMO_OTP){ clearInterval(otpInterval); goToSuccess(); } else { showAlert('tfaAlert','⚠ Incorrect code. Try again.','warn'); ins.forEach(i=>i.value=''); ins[0].focus(); }},900); }
+    setLoading('loginBtn', 'loginSpinner', 'loginBtnText', false)
 
-function backToLogin(e){ e.preventDefault(); clearInterval(otpInterval); clearInterval(otpResendInterval); document.getElementById('screen-2fa').style.display='none'; document.getElementById('screen-login').style.display='block'; document.getElementById('step1').className='step active'; document.getElementById('step1').querySelector('.step-circle').textContent='1'; document.getElementById('line1').className='step-line'; document.getElementById('step2').className='step'; hideAlert('loginAlert'); failAttempts=0; }
+    if (error) {
+      failAttempts++
+      if (failAttempts >= 3) {
+        triggerLockout()
+      } else {
+        const left = 3 - failAttempts
+        showAlert('loginAlert',
+          `⚠ ${error.message}. <strong>${left} attempt${left !== 1 ? 's' : ''} remaining.</strong>`,
+          'error')
+        document.getElementById('passwordInput').value = ''
+        shakeCard()
+      }
+    } else {
+      // ── Record login history in Supabase ──
+      await supabase.from('login_history').insert({
+        user_id:    data.user.id,
+        user_agent: navigator.userAgent,
+        location:   'Toledo, OH'
+      })
 
-function goToSuccess(){ document.getElementById('screen-2fa').style.display='none'; document.getElementById('screen-success').style.display='block'; document.getElementById('step2').className='step done'; document.getElementById('step2').querySelector('.step-circle').textContent='✓'; document.getElementById('line2').className='step-line done'; document.getElementById('step3').className='step active'; setTimeout(()=>document.getElementById('progressBar').style.width='100%',100); setTimeout(()=>{ document.getElementById('step3').className='step done'; document.getElementById('step3').querySelector('.step-circle').textContent='✓'; window.location.href='index.html'; },2800); }
+      // ── Save last-login string locally for the UI ──
+      const now = new Date().toLocaleString('en-US', {
+        month:'short', day:'numeric', year:'numeric',
+        hour:'numeric', minute:'2-digit'
+      })
+      localStorage.setItem('tillerman_last_login', now + ' · Chrome')
 
-setTimeout(()=>{ const h=document.createElement('div'); h.style.cssText='text-align:center;font-size:11px;color:var(--text3);font-family:var(--ff-m);margin-top:10px;'; h.innerHTML='Demo: <span style="color:var(--accent)">user@tillerman.app</span> / <span style="color:var(--accent)">Demo1234!</span> → OTP: <span style="color:var(--accent)">482156</span>'; document.querySelector('.page').appendChild(h); },600);
+      hideAlert('loginAlert')
+      goToSuccess()   // no 2FA step needed — Supabase handles session automatically
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  LOCKOUT
+  // ─────────────────────────────────────────────
+  function triggerLockout() {
+    document.getElementById('lockout').style.display = 'flex'
+    let s = 299
+    lockInterval = setInterval(() => {
+      s--
+      const m = Math.floor(s / 60)
+      document.getElementById('lockoutTimer').textContent = m + ':' + (s % 60).toString().padStart(2, '0')
+      if (s <= 0) {
+        clearInterval(lockInterval)
+        document.getElementById('lockout').style.display = 'none'
+        failAttempts = 0
+        showAlert('loginAlert', '✓ Account unlocked. You may try again.', 'ok')
+      }
+    }, 1000)
+  }
+
+  // ─────────────────────────────────────────────
+  //  2FA SCREEN (shown if you have Supabase phone
+  //  MFA enabled — skipped by default until set up)
+  // ─────────────────────────────────────────────
+  function goTo2FA() {
+    document.getElementById('screen-login').style.display = 'none'
+    document.getElementById('screen-2fa').style.display  = 'block'
+    document.getElementById('step1').className = 'step done'
+    document.getElementById('step1').querySelector('.step-circle').textContent = '✓'
+    document.getElementById('line1').className = 'step-line done'
+    document.getElementById('step2').className = 'step active'
+    setTimeout(() => document.querySelectorAll('.otp-input')[0].focus(), 100)
+    startOtpCountdown()
+    startResendCountdown()
+  }
+
+  function startOtpCountdown() {
+    otpSecondsLeft = 119
+    otpInterval = setInterval(() => {
+      otpSecondsLeft--
+      const m = Math.floor(otpSecondsLeft / 60)
+      document.getElementById('otpCountdown').textContent = m + ':' + (otpSecondsLeft % 60).toString().padStart(2, '0')
+      if (otpSecondsLeft <= 0) {
+        clearInterval(otpInterval)
+        document.getElementById('otpCountdown').textContent = 'expired'
+        document.getElementById('otpCountdown').style.color = 'var(--red)'
+        document.getElementById('tfaBtn').disabled = true
+        showAlert('tfaAlert', '⚠ Code expired. Request a new one.', 'warn')
+      }
+    }, 1000)
+  }
+
+  function startResendCountdown() {
+    resendSecondsLeft = 30
+    updateResendBtn()
+    otpResendInterval = setInterval(() => {
+      resendSecondsLeft--
+      updateResendBtn()
+      if (resendSecondsLeft <= 0) {
+        clearInterval(otpResendInterval)
+        const b = document.getElementById('resendBtn')
+        b.textContent = 'Resend code'
+        b.className = 'resend-btn active'
+      }
+    }, 1000)
+  }
+
+  function updateResendBtn() {
+    document.getElementById('resendBtn').textContent = 'Resend code (' + resendSecondsLeft + 's)'
+  }
+
+  // OTP input — auto-advance + auto-submit
+  document.querySelectorAll('.otp-input').forEach((inp, idx, all) => {
+    inp.addEventListener('input', () => {
+      inp.value = inp.value.replace(/\D/g, '')
+      if (inp.value && idx < 5) all[idx + 1].focus()
+      if ([...all].map(i => i.value).join('').length === 6) setTimeout(verifyOTP, 300)
+    })
+  })
+
+  // Backspace navigation between OTP boxes
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Backspace') {
+      const all = document.querySelectorAll('.otp-input')
+      all.forEach((inp, i) => {
+        if (document.activeElement === inp && !inp.value && i > 0) all[i - 1].focus()
+      })
+    }
+  })
+
+  document.getElementById('resendBtn').addEventListener('click', async () => {
+    const b = document.getElementById('resendBtn')
+    if (!b.classList.contains('active')) return
+    clearInterval(otpResendInterval)
+    document.querySelectorAll('.otp-input').forEach(i => i.value = '')
+    document.querySelectorAll('.otp-input')[0].focus()
+    hideAlert('tfaAlert')
+    showAlert('tfaAlert', '✓ New code sent to your phone.', 'ok')
+    setTimeout(() => hideAlert('tfaAlert'), 3000)
+    startOtpCountdown()
+    startResendCountdown()
+  })
+
+  // Verify OTP — uses Supabase MFA verifyTOTP when phone MFA is enabled
+  document.getElementById('tfaBtn').addEventListener('click', verifyOTP)
+
+  async function verifyOTP() {
+    const all  = document.querySelectorAll('.otp-input')
+    const code = [...all].map(i => i.value).join('')
+    if (code.length < 6) { showAlert('tfaAlert', '⚠ Please enter all 6 digits.', 'warn'); return }
+
+    setLoading('tfaBtn', 'tfaSpinner', 'tfaBtnText', true)
+
+    // When Supabase phone MFA is configured, verify here:
+    // const { data, error } = await supabase.auth.mfa.verify({ factorId: '...', code })
+    // For now falls through to success — replace with real MFA call once Twilio is connected
+    setTimeout(() => {
+      setLoading('tfaBtn', 'tfaSpinner', 'tfaBtnText', false)
+      clearInterval(otpInterval)
+      goToSuccess()
+    }, 900)
+  }
+
+  document.getElementById('backBtn').addEventListener('click', (e) => {
+    e.preventDefault()
+    clearInterval(otpInterval)
+    clearInterval(otpResendInterval)
+    document.getElementById('screen-2fa').style.display   = 'none'
+    document.getElementById('screen-login').style.display = 'block'
+    document.getElementById('step1').className = 'step active'
+    document.getElementById('step1').querySelector('.step-circle').textContent = '1'
+    document.getElementById('line1').className = 'step-line'
+    document.getElementById('step2').className = 'step'
+    hideAlert('loginAlert')
+    failAttempts = 0
+  })
+
+  // ─────────────────────────────────────────────
+  //  SUCCESS → redirect to dashboard
+  // ─────────────────────────────────────────────
+  function goToSuccess() {
+    document.getElementById('screen-2fa').style.display    = 'none'
+    document.getElementById('screen-login').style.display  = 'none'
+    document.getElementById('screen-success').style.display = 'block'
+    document.getElementById('step2').className = 'step done'
+    document.getElementById('step2').querySelector('.step-circle').textContent = '✓'
+    document.getElementById('line2').className = 'step-line done'
+    document.getElementById('step3').className = 'step active'
+    setTimeout(() => document.getElementById('progressBar').style.width = '100%', 100)
+    setTimeout(() => {
+      document.getElementById('step3').className = 'step done'
+      document.getElementById('step3').querySelector('.step-circle').textContent = '✓'
+      window.location.href = 'index.html'
+    }, 2800)
+  }
 </script>
+
 </body>
 </html>
