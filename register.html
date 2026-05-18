@@ -7,6 +7,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- ── SUPABASE SDK (Step 3) ── -->
+<script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+  }
+}
+</script>
+<script type="module" src="supabase.js"></script>
+<!-- ─────────────────────────── -->
+
 <style>
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 :root {
@@ -30,7 +42,6 @@ body::before { content:''; position:fixed; inset:0; background-image:linear-grad
 .logo-text { font-family:var(--ff-d); font-size:19px; font-weight:500; color:var(--text); letter-spacing:-.3px; }
 @keyframes fadeDown{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
-
 .card { width:100%; max-width:420px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--rl); overflow:hidden; animation:fadeUp .5s ease both .1s; position:relative; }
 .card::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--aborder),transparent); }
 .card-head { padding:24px 28px 18px; border-bottom:1px solid var(--border); }
@@ -40,8 +51,6 @@ body::before { content:''; position:fixed; inset:0; background-image:linear-grad
 .card-foot { padding:16px 28px; border-top:1px solid var(--border); text-align:center; font-size:12px; color:var(--text3); }
 .card-foot a { color:var(--accent); text-decoration:none; }
 .card-foot a:hover { text-decoration:underline; }
-
-/* FORM */
 .two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .field { margin-bottom:16px; }
 .two-col .field { margin-bottom:0; }
@@ -58,56 +67,38 @@ input[type=text], input[type=email], input[type=password], input[type=tel] {
 input:focus { border-color:var(--aborder); background:var(--bg4); }
 input::placeholder { color:var(--text3); }
 input.error { border-color:rgba(255,107,107,.4); }
-input.ok { border-color:rgba(74,222,128,.4); }
-
-/* PASSWORD STRENGTH */
+input.ok    { border-color:rgba(74,222,128,.4); }
 .pw-strength { margin-top:7px; }
 .pw-bars { display:flex; gap:3px; height:3px; margin-bottom:4px; }
 .pw-bar { flex:1; border-radius:2px; background:var(--bg4); transition:background .3s; }
 .pw-label { font-size:10px; font-family:var(--ff-m); color:var(--text3); text-align:right; transition:color .3s; }
-
-/* PHONE FORMAT HINT */
 .field-hint { font-size:10px; color:var(--text3); margin-top:4px; font-family:var(--ff-m); }
-
-/* TERMS */
 .terms-row { display:flex; align-items:flex-start; gap:10px; margin-bottom:18px; }
 .terms-check { width:16px; height:16px; border:1px solid var(--border2); border-radius:4px; background:var(--bg3); cursor:pointer; flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center; transition:all .2s; }
 .terms-check.checked { background:var(--accent); border-color:var(--accent); }
 .terms-check.checked::after { content:'✓'; font-size:10px; color:#0A0A0B; font-weight:700; }
 .terms-text { font-size:12px; color:var(--text3); line-height:1.6; }
 .terms-text a { color:var(--text2); text-decoration:underline; }
-
-/* ALERT */
 .alert { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:var(--r); font-size:12px; margin-bottom:14px; opacity:0; transform:translateY(-4px); transition:opacity .25s,transform .25s; pointer-events:none; line-height:1.5; }
 .alert.show { opacity:1; transform:translateY(0); pointer-events:auto; }
 .alert-error { background:var(--rdim); border:1px solid rgba(255,107,107,.2); color:var(--red); }
 .alert-ok    { background:var(--greendim); border:1px solid rgba(74,222,128,.2); color:var(--green); }
 .alert-warn  { background:var(--amberdim); border:1px solid rgba(245,200,66,.2); color:var(--amber); }
-
-/* SUBMIT BTN */
 .btn-primary { width:100%; padding:12px; background:var(--accent); border:none; border-radius:var(--r); font-size:14px; font-weight:500; color:#0A0A0B; cursor:pointer; font-family:var(--ff-b); transition:background .2s,transform .1s; }
 .btn-primary:hover { background:var(--accent2); }
 .btn-primary:active { transform:scale(.99); }
 .btn-primary:disabled { opacity:.4; cursor:not-allowed; background:var(--bg4); color:var(--text3); border:1px solid var(--border); transform:none; }
 .btn-spinner { display:none; width:16px; height:16px; border:2px solid rgba(0,0,0,.3); border-top-color:#0A0A0B; border-radius:50%; animation:spin .7s linear infinite; margin:0 auto; }
 @keyframes spin{to{transform:rotate(360deg);}}
-
-/* DIVIDER */
 .divider { display:flex; align-items:center; gap:12px; margin:16px 0; }
 .divider-line { flex:1; height:1px; background:var(--border); }
 .divider-text { font-size:11px; color:var(--text3); font-family:var(--ff-m); }
-
-/* OAUTH BUTTONS */
-.oauth-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:0; }
+.oauth-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .oauth-btn { display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; border-radius:var(--r); border:1px solid var(--border2); background:var(--bg3); font-size:12px; color:var(--text2); cursor:pointer; font-family:var(--ff-b); transition:all .2s; }
 .oauth-btn:hover { border-color:var(--border2); color:var(--text); background:var(--bg4); }
-
-/* TRUST */
 .trust-bar { max-width:420px; width:100%; margin-top:20px; display:flex; align-items:center; justify-content:center; gap:20px; animation:fadeUp .5s ease both .3s; }
 .trust-item { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text3); font-family:var(--ff-m); }
 .trust-dot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); }
-
-/* SUCCESS SCREEN */
 #screen-success { display:none; }
 </style>
 </head>
@@ -130,14 +121,21 @@ input.ok { border-color:rgba(74,222,128,.4); }
       </div>
       <div class="card-body">
 
-        <!-- OAUTH -->
+        <!-- OAUTH BUTTONS -->
         <div class="oauth-row">
-          <button class="oauth-btn" onclick="oauthSignup('Google')">
-            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#EA4335" d="M5.266 9.765A7.077 7.077 0 0 1 12 4.909c1.69 0 3.218.6 4.418 1.582L19.91 3C17.782 1.145 15.055 0 12 0 7.27 0 3.198 2.698 1.24 6.65l4.026 3.115Z"/><path fill="#34A853" d="M16.04 18.013c-1.09.703-2.474 1.078-4.04 1.078a7.077 7.077 0 0 1-6.723-4.823l-4.04 3.067A11.965 11.965 0 0 0 12 24c2.933 0 5.735-1.043 7.834-3l-3.793-2.987Z"/><path fill="#4A90D9" d="M19.834 21c2.195-2.048 3.62-5.096 3.62-9 0-.71-.109-1.473-.272-2.182H12v4.637h6.436c-.317 1.559-1.17 2.766-2.395 3.558L19.834 21Z"/><path fill="#FBBC05" d="M5.277 14.268A7.12 7.12 0 0 1 4.909 12c0-.782.125-1.533.357-2.235L1.24 6.65A11.934 11.934 0 0 0 0 12c0 1.92.445 3.73 1.237 5.335l4.04-3.067Z"/></svg>
+          <button class="oauth-btn" id="googleBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24">
+              <path fill="#EA4335" d="M5.266 9.765A7.077 7.077 0 0 1 12 4.909c1.69 0 3.218.6 4.418 1.582L19.91 3C17.782 1.145 15.055 0 12 0 7.27 0 3.198 2.698 1.24 6.65l4.026 3.115Z"/>
+              <path fill="#34A853" d="M16.04 18.013c-1.09.703-2.474 1.078-4.04 1.078a7.077 7.077 0 0 1-6.723-4.823l-4.04 3.067A11.965 11.965 0 0 0 12 24c2.933 0 5.735-1.043 7.834-3l-3.793-2.987Z"/>
+              <path fill="#4A90D9" d="M19.834 21c2.195-2.048 3.62-5.096 3.62-9 0-.71-.109-1.473-.272-2.182H12v4.637h6.436c-.317 1.559-1.17 2.766-2.395 3.558L19.834 21Z"/>
+              <path fill="#FBBC05" d="M5.277 14.268A7.12 7.12 0 0 1 4.909 12c0-.782.125-1.533.357-2.235L1.24 6.65A11.934 11.934 0 0 0 0 12c0 1.92.445 3.73 1.237 5.335l4.04-3.067Z"/>
+            </svg>
             Continue with Google
           </button>
-          <button class="oauth-btn" onclick="oauthSignup('Apple')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701z"/></svg>
+          <button class="oauth-btn" id="appleBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701z"/>
+            </svg>
             Continue with Apple
           </button>
         </div>
@@ -146,19 +144,19 @@ input.ok { border-color:rgba(74,222,128,.4); }
 
         <div class="alert alert-error" id="regAlert"><span>⚠</span><span id="regAlertMsg">Please fix the errors above.</span></div>
 
-        <!-- NAME ROW -->
+        <!-- NAME -->
         <div class="two-col" style="margin-bottom:16px;">
           <div class="field">
             <div class="field-label">First name</div>
             <div class="input-wrap">
-              <input type="text" id="firstName" placeholder="Jane" oninput="clearAlert()">
+              <input type="text" id="firstName" placeholder="Jane">
               <span class="input-icon">👤</span>
             </div>
           </div>
           <div class="field">
             <div class="field-label">Last name</div>
             <div class="input-wrap">
-              <input type="text" id="lastName" placeholder="Smith" oninput="clearAlert()">
+              <input type="text" id="lastName" placeholder="Smith">
             </div>
           </div>
         </div>
@@ -167,7 +165,7 @@ input.ok { border-color:rgba(74,222,128,.4); }
         <div class="field">
           <div class="field-label">Email address</div>
           <div class="input-wrap">
-            <input type="email" id="regEmail" placeholder="jane@example.com" autocomplete="email" oninput="validateEmail()">
+            <input type="email" id="regEmail" placeholder="jane@example.com" autocomplete="email">
             <span class="input-icon">✉</span>
             <span class="input-icon-right" id="emailCheck" style="pointer-events:none;"></span>
           </div>
@@ -177,19 +175,19 @@ input.ok { border-color:rgba(74,222,128,.4); }
         <div class="field">
           <div class="field-label">Phone number <span style="color:var(--text3);font-size:10px;text-transform:none;letter-spacing:0;">for 2FA texts</span></div>
           <div class="input-wrap">
-            <input type="tel" id="regPhone" placeholder="+1 (555) 000-0000" autocomplete="tel" oninput="formatPhone(this)">
+            <input type="tel" id="regPhone" placeholder="+1 (555) 000-0000" autocomplete="tel">
             <span class="input-icon">📱</span>
           </div>
-          <div class="field-hint">Your number is used only for two-factor authentication. We never share it.</div>
+          <div class="field-hint">Used only for two-factor authentication. Never shared.</div>
         </div>
 
         <!-- PASSWORD -->
         <div class="field">
           <div class="field-label">Password</div>
           <div class="input-wrap">
-            <input type="password" id="regPassword" placeholder="Min 8 characters" autocomplete="new-password" oninput="checkStrength(this.value); clearAlert()">
+            <input type="password" id="regPassword" placeholder="Min 8 characters" autocomplete="new-password">
             <span class="input-icon">🔑</span>
-            <span class="input-icon-right" onclick="togglePw('regPassword',this)">👁</span>
+            <span class="input-icon-right" id="pwToggle1">👁</span>
           </div>
           <div class="pw-strength">
             <div class="pw-bars">
@@ -204,19 +202,19 @@ input.ok { border-color:rgba(74,222,128,.4); }
         <div class="field">
           <div class="field-label">Confirm password</div>
           <div class="input-wrap">
-            <input type="password" id="regConfirm" placeholder="Re-enter password" autocomplete="new-password" oninput="checkConfirm()">
+            <input type="password" id="regConfirm" placeholder="Re-enter password" autocomplete="new-password">
             <span class="input-icon">🔑</span>
-            <span class="input-icon-right" onclick="togglePw('regConfirm',this)">👁</span>
+            <span class="input-icon-right" id="pwToggle2">👁</span>
           </div>
         </div>
 
         <!-- TERMS -->
         <div class="terms-row">
-          <div class="terms-check" id="termsCheck" onclick="toggleTerms()"></div>
+          <div class="terms-check" id="termsCheck"></div>
           <div class="terms-text">I agree to Tillerman's <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>. I'm 18 years or older.</div>
         </div>
 
-        <button class="btn-primary" id="regBtn" onclick="createAccount()">
+        <button class="btn-primary" id="regBtn">
           <span id="regBtnText">Create account →</span>
           <div class="btn-spinner" id="regSpinner"></div>
         </button>
@@ -224,16 +222,22 @@ input.ok { border-color:rgba(74,222,128,.4); }
       <div class="card-foot">Already have an account? <a href="login.html">Sign in →</a></div>
     </div>
 
-    <!-- SUCCESS -->
+    <!-- SUCCESS SCREEN -->
     <div id="screen-success">
-      <div class="card-head"><div class="card-title">Account created! 🎉</div><div class="card-sub">Welcome to Tillerman</div></div>
+      <div class="card-head">
+        <div class="card-title">Account created! 🎉</div>
+        <div class="card-sub">Welcome to Tillerman</div>
+      </div>
       <div class="card-body" style="text-align:center; padding:36px 28px;">
         <div style="font-size:48px; margin-bottom:16px;">✅</div>
         <div style="font-family:var(--ff-d); font-size:17px; color:var(--accent); margin-bottom:10px;">You're all set.</div>
-        <div style="font-size:13px; color:var(--text2); margin-bottom:24px; line-height:1.6;">We sent a verification link to your email.<br>Redirecting you to sign in…</div>
+        <div style="font-size:13px; color:var(--text2); margin-bottom:24px; line-height:1.6;">
+          We sent a verification link to your email.<br>Click it to activate your account, then sign in.
+        </div>
         <div style="height:3px; background:var(--bg4); border-radius:2px; overflow:hidden;">
           <div id="regProgressBar" style="height:100%; width:0%; background:var(--accent); transition:width 2.5s linear; border-radius:2px;"></div>
         </div>
+        <div style="font-size:11px; color:var(--text3); margin-top:10px; font-family:var(--ff-m);">Redirecting to sign in…</div>
       </div>
     </div>
 
@@ -247,106 +251,193 @@ input.ok { border-color:rgba(74,222,128,.4); }
 
 </div>
 
-<script>
-let termsChecked = false;
-let pwStrength = 0;
+<!-- ── ALL LOGIC AS MODULE so it can import Supabase ── -->
+<script type="module">
+  import { supabase } from './supabase.js'
 
-function toggleTerms() {
-  termsChecked = !termsChecked;
-  document.getElementById('termsCheck').classList.toggle('checked', termsChecked);
-}
+  // ─────────────────────────────────────────────
+  //  STATE
+  // ─────────────────────────────────────────────
+  let termsChecked = false
+  let pwStrength   = 0
 
-function togglePw(id, icon) {
-  const i = document.getElementById(id);
-  i.type = i.type === 'password' ? 'text' : 'password';
-  icon.textContent = i.type === 'text' ? '🙈' : '👁';
-}
+  // ─────────────────────────────────────────────
+  //  ON LOAD — skip registration if already logged in
+  // ─────────────────────────────────────────────
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session) window.location.href = 'index.html'
 
-function validateEmail() {
-  const el = document.getElementById('regEmail');
-  const check = document.getElementById('emailCheck');
-  const val = el.value.trim();
-  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
-  el.className = val.length > 3 ? (valid ? 'ok' : 'error') : '';
-  check.textContent = val.length > 3 ? (valid ? '✓' : '✕') : '';
-  check.style.color = valid ? 'var(--green)' : 'var(--red)';
-}
-
-function formatPhone(el) {
-  let v = el.value.replace(/\D/g,'');
-  if (v.length > 10) v = v.slice(0,10);
-  if (v.length >= 6) el.value = '(' + v.slice(0,3) + ') ' + v.slice(3,6) + '-' + v.slice(6);
-  else if (v.length >= 3) el.value = '(' + v.slice(0,3) + ') ' + v.slice(3);
-  else el.value = v;
-}
-
-function checkStrength(pw) {
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (/[A-Z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  pwStrength = score;
-  const colors = ['','var(--red)','var(--amber)','var(--amber)','var(--green)'];
-  const labels = ['Enter a password','Weak','Fair','Good','Strong'];
-  for (let i=1;i<=4;i++) {
-    document.getElementById('b'+i).style.background = i<=score ? colors[score] : 'var(--bg4)';
+  // ─────────────────────────────────────────────
+  //  HELPERS
+  // ─────────────────────────────────────────────
+  function showAlert(msg, type) {
+    const el = document.getElementById('regAlert')
+    el.className = 'alert alert-' + type + ' show'
+    document.getElementById('regAlertMsg').innerHTML = msg
   }
-  document.getElementById('pwLabel').textContent = labels[score];
-  document.getElementById('pwLabel').style.color = colors[score] || 'var(--text3)';
-}
+  function clearAlert() { document.getElementById('regAlert').classList.remove('show') }
 
-function checkConfirm() {
-  const pw = document.getElementById('regPassword').value;
-  const cf = document.getElementById('regConfirm');
-  if (cf.value.length > 0) {
-    cf.className = cf.value === pw ? 'ok' : 'error';
+  function setLoading(on) {
+    document.getElementById('regBtn').disabled = on
+    document.getElementById('regSpinner').style.display  = on ? 'block' : 'none'
+    document.getElementById('regBtnText').style.display  = on ? 'none'  : 'inline'
   }
-}
 
-function clearAlert() { document.getElementById('regAlert').classList.remove('show'); }
+  // ─────────────────────────────────────────────
+  //  TERMS CHECKBOX
+  // ─────────────────────────────────────────────
+  document.getElementById('termsCheck').addEventListener('click', () => {
+    termsChecked = !termsChecked
+    document.getElementById('termsCheck').classList.toggle('checked', termsChecked)
+  })
 
-function showAlert(msg, type) {
-  const el = document.getElementById('regAlert');
-  el.className = 'alert alert-' + type + ' show';
-  document.getElementById('regAlertMsg').innerHTML = msg;
-}
+  // ─────────────────────────────────────────────
+  //  PASSWORD TOGGLES
+  // ─────────────────────────────────────────────
+  document.getElementById('pwToggle1').addEventListener('click', function () {
+    const inp = document.getElementById('regPassword')
+    inp.type = inp.type === 'password' ? 'text' : 'password'
+    this.textContent = inp.type === 'text' ? '🙈' : '👁'
+  })
+  document.getElementById('pwToggle2').addEventListener('click', function () {
+    const inp = document.getElementById('regConfirm')
+    inp.type = inp.type === 'password' ? 'text' : 'password'
+    this.textContent = inp.type === 'text' ? '🙈' : '👁'
+  })
 
-function setLoading(on) {
-  document.getElementById('regBtn').disabled = on;
-  document.getElementById('regSpinner').style.display = on ? 'block' : 'none';
-  document.getElementById('regBtnText').style.display = on ? 'none' : 'inline';
-}
+  // ─────────────────────────────────────────────
+  //  LIVE VALIDATION
+  // ─────────────────────────────────────────────
+  document.getElementById('regEmail').addEventListener('input', function () {
+    clearAlert()
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.value.trim())
+    const check = document.getElementById('emailCheck')
+    this.className = this.value.length > 3 ? (valid ? 'ok' : 'error') : ''
+    check.textContent  = this.value.length > 3 ? (valid ? '✓' : '✕') : ''
+    check.style.color  = valid ? 'var(--green)' : 'var(--red)'
+  })
 
-function oauthSignup(provider) {
-  showAlert('ℹ ' + provider + ' OAuth signup would open a popup here. Connect ' + provider + ' in your backend to enable.', 'warn');
-}
+  document.getElementById('regPhone').addEventListener('input', function () {
+    let v = this.value.replace(/\D/g, '')
+    if (v.length > 10) v = v.slice(0, 10)
+    if      (v.length >= 6) this.value = '(' + v.slice(0,3) + ') ' + v.slice(3,6) + '-' + v.slice(6)
+    else if (v.length >= 3) this.value = '(' + v.slice(0,3) + ') ' + v.slice(3)
+    else                    this.value = v
+  })
 
-function createAccount() {
-  const first = document.getElementById('firstName').value.trim();
-  const last  = document.getElementById('lastName').value.trim();
-  const email = document.getElementById('regEmail').value.trim();
-  const phone = document.getElementById('regPhone').value.trim();
-  const pw    = document.getElementById('regPassword').value;
-  const cf    = document.getElementById('regConfirm').value;
+  document.getElementById('regPassword').addEventListener('input', function () {
+    clearAlert()
+    const pw = this.value
+    let score = 0
+    if (pw.length >= 8)           score++
+    if (/[A-Z]/.test(pw))         score++
+    if (/[0-9]/.test(pw))         score++
+    if (/[^A-Za-z0-9]/.test(pw))  score++
+    pwStrength = score
+    const colors = ['', 'var(--red)', 'var(--amber)', 'var(--amber)', 'var(--green)']
+    const labels = ['Enter a password', 'Weak', 'Fair', 'Good', 'Strong']
+    for (let i = 1; i <= 4; i++) {
+      document.getElementById('b' + i).style.background = i <= score ? colors[score] : 'var(--bg4)'
+    }
+    document.getElementById('pwLabel').textContent = labels[score]
+    document.getElementById('pwLabel').style.color = colors[score] || 'var(--text3)'
+  })
 
-  if (!first || !last) { showAlert('⚠ Please enter your first and last name.', 'error'); return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showAlert('⚠ Please enter a valid email address.', 'error'); return; }
-  if (!phone || phone.replace(/\D/g,'').length < 10) { showAlert('⚠ Please enter a valid 10-digit phone number for 2FA.', 'error'); return; }
-  if (pw.length < 8) { showAlert('⚠ Password must be at least 8 characters.', 'error'); return; }
-  if (pwStrength < 2) { showAlert('⚠ Please choose a stronger password — add numbers or symbols.', 'error'); return; }
-  if (pw !== cf) { showAlert('⚠ Passwords do not match.', 'error'); return; }
-  if (!termsChecked) { showAlert('⚠ Please agree to the Terms of Service to continue.', 'error'); return; }
+  document.getElementById('regConfirm').addEventListener('input', function () {
+    const pw = document.getElementById('regPassword').value
+    if (this.value.length > 0) this.className = this.value === pw ? 'ok' : 'error'
+  })
 
-  setLoading(true);
-  setTimeout(() => {
-    setLoading(false);
-    document.getElementById('screen-register').style.display = 'none';
-    document.getElementById('screen-success').style.display = 'block';
-    setTimeout(() => document.getElementById('regProgressBar').style.width = '100%', 100);
-    setTimeout(() => window.location.href = 'login.html', 2800);
-  }, 1400);
-}
+  ;['firstName', 'lastName'].forEach(id => {
+    document.getElementById(id).addEventListener('input', clearAlert)
+  })
+
+  // ─────────────────────────────────────────────
+  //  OAUTH — real Supabase signInWithOAuth (Step 7 & 8)
+  // ─────────────────────────────────────────────
+  document.getElementById('googleBtn').addEventListener('click', () => oauthSignup('google'))
+  document.getElementById('appleBtn').addEventListener('click',  () => oauthSignup('apple'))
+
+  async function oauthSignup(provider) {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.origin + '/index.html'
+      }
+    })
+    if (error) showAlert('⚠ ' + error.message, 'error')
+    // On success Supabase redirects the browser automatically —
+    // no further JS needed here.
+  }
+
+  // ─────────────────────────────────────────────
+  //  CREATE ACCOUNT — real Supabase signUp (Step 9)
+  // ─────────────────────────────────────────────
+  document.getElementById('regBtn').addEventListener('click', createAccount)
+
+  async function createAccount() {
+    const first = document.getElementById('firstName').value.trim()
+    const last  = document.getElementById('lastName').value.trim()
+    const email = document.getElementById('regEmail').value.trim()
+    const phone = document.getElementById('regPhone').value.trim()
+    const pw    = document.getElementById('regPassword').value
+    const cf    = document.getElementById('regConfirm').value
+
+    // ── Client-side validation (unchanged) ──
+    if (!first || !last) {
+      showAlert('⚠ Please enter your first and last name.', 'error'); return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showAlert('⚠ Please enter a valid email address.', 'error'); return
+    }
+    if (!phone || phone.replace(/\D/g,'').length < 10) {
+      showAlert('⚠ Please enter a valid 10-digit phone number for 2FA.', 'error'); return
+    }
+    if (pw.length < 8) {
+      showAlert('⚠ Password must be at least 8 characters.', 'error'); return
+    }
+    if (pwStrength < 2) {
+      showAlert('⚠ Please choose a stronger password — add numbers or symbols.', 'error'); return
+    }
+    if (pw !== cf) {
+      showAlert('⚠ Passwords do not match.', 'error'); return
+    }
+    if (!termsChecked) {
+      showAlert('⚠ Please agree to the Terms of Service to continue.', 'error'); return
+    }
+
+    setLoading(true)
+
+    // ── Real Supabase sign-up ──
+    // full_name and phone are stored in user_metadata,
+    // then picked up by the handle_new_user() trigger (Step 4)
+    // which writes them into the profiles table automatically.
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: pw,
+      options: {
+        data: {
+          full_name: first + ' ' + last,
+          phone:     '+1' + phone.replace(/\D/g, '')
+        }
+      }
+    })
+
+    setLoading(false)
+
+    if (error) {
+      // Common errors: "User already registered", "Password should be at least 6 characters"
+      showAlert('⚠ ' + error.message, 'error')
+      return
+    }
+
+    // ── Success — show confirmation screen ──
+    document.getElementById('screen-register').style.display = 'none'
+    document.getElementById('screen-success').style.display  = 'block'
+    setTimeout(() => document.getElementById('regProgressBar').style.width = '100%', 100)
+    setTimeout(() => window.location.href = 'login.html', 2800)
+  }
 </script>
+
 </body>
 </html>
