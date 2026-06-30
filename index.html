@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
-<!-- ── SUPABASE SDK (Step 3) ── -->
+<!-- ── SUPABASE SDK ── -->
 <script type="importmap">
 {
   "imports": {
@@ -26,7 +26,8 @@
   --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.11);
   --text:#EDEAE2; --text2:#8E8C84; --text3:#4E4C47;
   --accent:#C8F55A; --accent2:#A8D848; --adim:rgba(200,245,90,0.08); --aborder:rgba(200,245,90,0.22);
-  --blue:#6B9FFF; --red:#FF6E6E; --amber:#F7CA45; --teal:#3ED9C8;
+  --blue:#6B9FFF; --bdim:rgba(107,159,255,0.09);
+  --red:#FF6E6E; --amber:#F7CA45; --amberdim:rgba(247,202,69,0.09); --teal:#3ED9C8;
   --ff-d:'Fraunces',Georgia,serif; --ff-b:'DM Sans',sans-serif; --ff-m:'DM Mono',monospace;
   --r:10px; --rl:16px;
 }
@@ -40,8 +41,7 @@ nav { position:sticky; top:0; z-index:100; display:flex; align-items:center; jus
 .nav-mark { width:30px; height:30px; border-radius:8px; background:var(--accent); color:#0C0C0D; display:flex; align-items:center; justify-content:center; font-family:var(--ff-d); font-size:15px; font-weight:500; letter-spacing:-.5px; }
 .nav-wordmark { font-family:var(--ff-d); font-size:17px; font-weight:500; color:var(--text); letter-spacing:-.3px; }
 .nav-right { display:flex; align-items:center; gap:8px; }
-.nav-user { display:flex; align-items:center; gap:8px; padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:var(--bg3); font-size:12px; color:var(--text2); cursor:pointer; text-decoration:none; transition:border-color .2s,color .2s; }
-.nav-user:hover { border-color:var(--border2); color:var(--text); }
+.nav-user { display:flex; align-items:center; gap:8px; padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:var(--bg3); font-size:12px; color:var(--text2); }
 .nav-avatar { width:22px; height:22px; border-radius:50%; background:var(--adim); border:1px solid var(--aborder); display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--accent); font-weight:500; }
 .nav-cta { display:flex; align-items:center; gap:6px; padding:7px 16px; border-radius:20px; background:var(--accent); color:#0C0C0D; font-size:13px; font-weight:500; text-decoration:none; border:none; cursor:pointer; transition:background .15s; font-family:var(--ff-b); }
 .nav-cta:hover { background:var(--accent2); }
@@ -65,7 +65,7 @@ nav { position:sticky; top:0; z-index:100; display:flex; align-items:center; jus
 .stat-cell { background:var(--bg2); padding:18px 22px; display:flex; flex-direction:column; gap:5px; transition:background .2s; }
 .stat-cell:hover { background:var(--bg3); }
 .stat-lbl { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; font-family:var(--ff-m); }
-.stat-val { font-family:var(--ff-d); font-size:26px; font-weight:300; letter-spacing:-1px; color:var(--text3); }
+.stat-val { font-family:var(--ff-d); font-size:26px; font-weight:300; letter-spacing:-1px; color:var(--text); }
 .stat-hint { font-size:11px; color:var(--text3); font-family:var(--ff-m); }
 
 /* MAIN GRID */
@@ -92,6 +92,30 @@ nav { position:sticky; top:0; z-index:100; display:flex; align-items:center; jus
 .friend-empty { padding:24px 20px; text-align:center; }
 .friend-empty p { font-size:12px; color:var(--text3); margin-bottom:12px; line-height:1.6; }
 
+/* TXN LIST */
+.txn-list { padding:0; }
+.txn-row { display:flex; align-items:center; gap:14px; padding:14px 20px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .15s; }
+.txn-row:last-child { border-bottom:none; }
+.txn-row:hover { background:var(--bg3); }
+.txn-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; background:var(--bg4); }
+.txn-info { flex:1; min-width:0; }
+.txn-name { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.txn-meta { font-size:11px; color:var(--text3); margin-top:2px; font-family:var(--ff-m); }
+.txn-right { text-align:right; flex-shrink:0; }
+.txn-amount { font-family:var(--ff-m); font-size:13px; font-weight:500; color:var(--text); }
+.txn-badge { display:inline-block; font-size:10px; padding:2px 7px; border-radius:4px; margin-top:3px; font-family:var(--ff-m); }
+.badge-pending { background:var(--amberdim); color:var(--amber); }
+.badge-paid { background:var(--adim); color:var(--accent); }
+.badge-personal { background:var(--bg4); color:var(--text3); }
+
+/* OWED LIST */
+.owed-row { display:flex; align-items:center; gap:10px; padding:10px 20px; border-bottom:1px solid var(--border); }
+.owed-row:last-child { border-bottom:none; }
+.avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:500; flex-shrink:0; background:var(--bdim); color:var(--blue); }
+.owed-name { font-size:13px; color:var(--text); flex:1; }
+.owed-detail { font-size:11px; color:var(--text3); margin-top:1px; }
+.owed-amount { font-family:var(--ff-m); font-size:13px; color:var(--blue); font-weight:500; }
+
 /* TIPS GRID */
 .tips-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:32px; animation:fadeUp .45s ease both .24s; }
 .tip-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--rl); padding:18px 20px; display:flex; flex-direction:column; gap:9px; transition:border-color .2s,background .2s; cursor:pointer; text-decoration:none; }
@@ -108,6 +132,11 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 .foot-link { font-size:11px; color:var(--text3); text-decoration:none; transition:color .2s; }
 .foot-link:hover { color:var(--text2); }
 
+/* LOADER */
+.loader-row { display:flex; align-items:center; justify-content:center; padding:24px; gap:10px; color:var(--text3); font-size:12px; font-family:var(--ff-m); }
+.spin { width:14px; height:14px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg);} }
+
 @keyframes fadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
 </style>
 </head>
@@ -119,30 +148,30 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     <span class="nav-wordmark">Tillerman</span>
   </a>
   <div class="nav-right">
-    <a class="nav-user" href="login.html">
-      <div class="nav-avatar" id="navAvatar">YO</div>
-      <span id="navName">Your account</span>
-    </a>
+    <div class="nav-user">
+      <div class="nav-avatar">YO</div>
+      <span>Local device</span>
+    </div>
     <a class="nav-cta" href="expenses.html">+ Add expense</a>
   </div>
 </nav>
 
 <div class="shell">
   <div class="page-header">
-    <div class="greeting">Good morning, <em id="greetName">let's get started.</em></div>
-    <div class="subgreet" id="subgreet">No expenses logged yet · May 2026</div>
+    <div class="greeting">Good <span id="todWord">day</span>, <em>here's your spending.</em></div>
+    <div class="subgreet" id="subgreet">Loading… · <span id="monthLabel"></span></div>
   </div>
 
   <div class="security-bar">
     <div class="sec-dot"></div>
-    <span id="secMsg">Session is encrypted and secure. Transactions are stored locally until you connect a backend.</span>
+    <span>No login required — your data is saved automatically to this device's Tillerman account.</span>
   </div>
 
   <div class="stat-strip">
-    <div class="stat-cell"><div class="stat-lbl">Total spent</div><div class="stat-val">$0</div><div class="stat-hint">No expenses yet</div></div>
-    <div class="stat-cell"><div class="stat-lbl">Owed to you</div><div class="stat-val">$0</div><div class="stat-hint">No splits yet</div></div>
-    <div class="stat-cell"><div class="stat-lbl">Your net cost</div><div class="stat-val">$0</div><div class="stat-hint">After all splits</div></div>
-    <div class="stat-cell"><div class="stat-lbl">Receipts scanned</div><div class="stat-val">0</div><div class="stat-hint">Upload your first</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Total spent</div><div class="stat-val" id="statTotal">$0</div><div class="stat-hint" id="statTotalHint">This month</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Owed to you</div><div class="stat-val" id="statOwed">$0</div><div class="stat-hint" id="statOwedHint">No splits yet</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Your net cost</div><div class="stat-val" id="statNet">$0</div><div class="stat-hint">After all splits</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Receipts logged</div><div class="stat-val" id="statCount">0</div><div class="stat-hint">All time</div></div>
   </div>
 
   <div class="main-grid">
@@ -151,32 +180,23 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
         <div class="panel-title">Transactions</div>
         <a href="expenses.html" class="panel-btn">+ New expense</a>
       </div>
-      <div class="empty-state">
-        <div class="empty-icon">🧾</div>
-        <div class="empty-title">No transactions yet</div>
-        <div class="empty-sub">Add your first expense manually or upload a receipt to get started.</div>
-        <a href="expenses.html" class="empty-cta">Add first expense →</a>
-        <a href="expenses.html" class="empty-ghost">Upload a receipt</a>
+      <div id="txnContainer">
+        <div class="loader-row"><div class="spin"></div> Loading transactions…</div>
       </div>
     </div>
 
     <div style="display:flex; flex-direction:column; gap:16px;">
       <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">People</div>
-          <button class="panel-btn" onclick="addFriend()">+ Add person</button>
-        </div>
-        <div class="friend-empty">
-          <p>Add people you split expenses with. They'll be available when assigning receipt items.</p>
-          <button class="empty-ghost" style="width:100%; justify-content:center;" onclick="addFriend()">+ Add a person</button>
+        <div class="panel-head"><div class="panel-title">Who owes you</div></div>
+        <div id="owedContainer">
+          <div class="loader-row"><div class="spin"></div> Loading…</div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><div class="panel-title">Pending reminders</div></div>
-        <div class="empty-state" style="padding:28px 20px;">
-          <div style="font-size:24px;">📬</div>
-          <div class="empty-sub">No pending requests. They'll show here once you split an expense.</div>
+        <div class="panel-head"><div class="panel-title">This month by category</div></div>
+        <div id="categoryContainer" style="padding:16px 20px;">
+          <div class="loader-row"><div class="spin"></div> Loading…</div>
         </div>
       </div>
     </div>
@@ -195,21 +215,20 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       <div class="tip-desc">No receipt? Enter a transaction, amount, category and assign it to people.</div>
       <div class="tip-arrow">Add manually →</div>
     </a>
-    <a href="#" class="tip-card" onclick="connectBank(); return false;">
-      <div class="tip-icon">🏦</div>
-      <div class="tip-title">Connect your bank</div>
-      <div class="tip-desc">Link a card to get notified the moment a charge hits your account.</div>
-      <div class="tip-arrow">Coming soon →</div>
+    <a href="#" class="tip-card" id="refreshTip">
+      <div class="tip-icon">🔄</div>
+      <div class="tip-title">Refresh data</div>
+      <div class="tip-desc">Reload the dashboard with the latest saved expenses from your database.</div>
+      <div class="tip-arrow">Refresh →</div>
     </a>
   </div>
 </div>
 
 <footer>
-  <div class="foot-l">Tillerman · Toledo, OH · May 2026</div>
+  <div class="foot-l">Tillerman · Toledo, OH · <span id="footMonth"></span></div>
   <div class="foot-r">
     <a class="foot-link" href="#">Settings</a>
     <a class="foot-link" href="#">Export</a>
-    <a class="foot-link" href="#" onclick="signOut(); return false;">Sign out</a>
   </div>
 </footer>
 
@@ -217,47 +236,217 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 <script type="module">
   import { supabase } from './supabase.js'
 
-  // ── GUARD: redirect to login if no session ──
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
-    window.location.href = 'login.html'
+  // ─────────────────────────────────────────────
+  //  NO LOGIN REQUIRED — anonymous session
+  //  This silently creates (or reuses) a device-local
+  //  Supabase user so all your expense data is saved
+  //  to a real account behind the scenes, with no
+  //  login screen in the way.
+  // ─────────────────────────────────────────────
+  async function ensureSession() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) return session
+
+    const { data, error } = await supabase.auth.signInAnonymously()
+    if (error) {
+      console.error('Anonymous sign-in failed:', error.message)
+      document.getElementById('subgreet').textContent =
+        'Could not connect — check that Anonymous Sign-ins is enabled in Supabase → Authentication → Providers.'
+      return null
+    }
+    return data.session
   }
 
-  // ── POPULATE UI with real user info ──
-  if (session?.user) {
-    const meta      = session.user.user_metadata || {}
-    const fullName  = meta.full_name || session.user.email || 'there'
-    const initials  = fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    const hour      = new Date().getHours()
-    const tod       = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
-    const firstName = fullName.split(' ')[0]
+  const session = await ensureSession()
+  const USER_ID = session?.user?.id
 
-    document.getElementById('greetName').textContent  = firstName + '.'
-    document.getElementById('subgreet').textContent   =
-      'No expenses logged yet · ' + new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' })
-    document.getElementById('navName').textContent    = firstName
-    document.getElementById('navAvatar').textContent  = initials
-    document.querySelector('.greeting').innerHTML     =
-      'Good ' + tod + ', <em id="greetName">' + firstName + '.</em>'
-    document.getElementById('secMsg').textContent     =
-      'Signed in as ' + session.user.email + ' · Session encrypted and secure.'
+  // ─────────────────────────────────────────────
+  //  TIME OF DAY GREETING
+  // ─────────────────────────────────────────────
+  const hour = new Date().getHours()
+  document.getElementById('todWord').textContent = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+  const monthName = new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' })
+  document.getElementById('monthLabel').textContent = monthName
+  document.getElementById('footMonth').textContent = monthName
+
+  // ─────────────────────────────────────────────
+  //  LOAD DASHBOARD DATA
+  // ─────────────────────────────────────────────
+  async function loadDashboard() {
+    if (!USER_ID) return
+
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+
+    const { data: expenses, error: expErr } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('user_id', USER_ID)
+      .order('created_at', { ascending: false })
+
+    if (expErr) {
+      document.getElementById('subgreet').textContent = 'Error loading data: ' + expErr.message
+      return
+    }
+
+    const { data: splits } = await supabase
+      .from('splits')
+      .select('*')
+      .in('expense_id', (expenses || []).map(e => e.id))
+
+    renderStats(expenses || [], splits || [], startOfMonth)
+    renderTransactions(expenses || [], splits || [])
+    renderOwed(splits || [], expenses || [])
+    renderCategories(expenses || [], startOfMonth)
+
+    document.getElementById('subgreet').textContent =
+      (expenses?.length ? expenses.length + ' expenses logged' : 'No expenses logged yet') + ' · ' + monthName
   }
 
-  // ── SIGN OUT ──
-  window.signOut = async function () {
-    await supabase.auth.signOut()
-    window.location.href = 'login.html'
+  function renderStats(expenses, splits, startOfMonth) {
+    const thisMonth = expenses.filter(e => e.expense_date >= startOfMonth)
+    const totalThisMonth = thisMonth.reduce((s, e) => s + parseFloat(e.total_amount || 0), 0)
+
+    const unpaidSplits = splits.filter(s => !s.is_paid)
+    const owedTotal = unpaidSplits.reduce((s, x) => s + parseFloat(x.amount_owed || 0), 0)
+
+    const allTotal = expenses.reduce((s, e) => s + parseFloat(e.total_amount || 0), 0)
+    const allOwed  = splits.reduce((s, x) => s + parseFloat(x.amount_owed || 0), 0)
+    const netCost  = allTotal - allOwed
+
+    document.getElementById('statTotal').textContent = '$' + totalThisMonth.toFixed(2)
+    document.getElementById('statTotalHint').textContent = thisMonth.length + ' expense' + (thisMonth.length===1?'':'s') + ' this month'
+    document.getElementById('statOwed').textContent = '$' + owedTotal.toFixed(2)
+    document.getElementById('statOwedHint').textContent = unpaidSplits.length ? unpaidSplits.length + ' pending' : 'No splits yet'
+    document.getElementById('statNet').textContent = '$' + netCost.toFixed(2)
+    document.getElementById('statCount').textContent = expenses.length
   }
 
-  // ── ADD FRIEND (placeholder until contacts table is built) ──
-  window.addFriend = function () {
-    const n = prompt('Enter person\'s name:')
-    if (n && n.trim()) alert('"' + n.trim() + '" added! They\'ll be selectable when you split expenses.')
+  function renderTransactions(expenses, splits) {
+    const container = document.getElementById('txnContainer')
+    if (expenses.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🧾</div>
+          <div class="empty-title">No transactions yet</div>
+          <div class="empty-sub">Add your first expense manually or upload a receipt to get started.</div>
+          <a href="expenses.html" class="empty-cta">Add first expense →</a>
+        </div>`
+      return
+    }
+
+    const icons = { Groceries:'🛒', Dining:'🍽️', Transport:'⛽', Entertainment:'🎬', Health:'💊', Household:'🏠', Other:'📦' }
+
+    let html = '<div class="txn-list">'
+    expenses.slice(0, 8).forEach(e => {
+      const itemSplits = splits.filter(s => s.expense_id === e.id)
+      const hasUnpaid = itemSplits.some(s => !s.is_paid)
+      const hasAny = itemSplits.length > 0
+      const badge = hasUnpaid
+        ? '<span class="txn-badge badge-pending">split pending</span>'
+        : hasAny
+          ? '<span class="txn-badge badge-paid">✓ all paid</span>'
+          : '<span class="txn-badge badge-personal">personal</span>'
+      const date = new Date(e.expense_date || e.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })
+      html += `
+        <div class="txn-row">
+          <div class="txn-icon">${icons[e.category] || '💳'}</div>
+          <div class="txn-info">
+            <div class="txn-name">${escHtml(e.merchant || 'Unnamed expense')}</div>
+            <div class="txn-meta">${date}${e.payment_method ? ' · ' + escHtml(e.payment_method) : ''}</div>
+          </div>
+          <div class="txn-right">
+            <div class="txn-amount">$${parseFloat(e.total_amount).toFixed(2)}</div>
+            ${badge}
+          </div>
+        </div>`
+    })
+    html += '</div>'
+    container.innerHTML = html
   }
 
-  window.connectBank = function () {
-    alert('Bank connection via Plaid is coming in the next build.\nFor now add expenses manually or by uploading a receipt.')
+  function renderOwed(splits, expenses) {
+    const container = document.getElementById('owedContainer')
+    const unpaid = splits.filter(s => !s.is_paid)
+
+    if (unpaid.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding:28px 20px;">
+          <div style="font-size:24px;">📬</div>
+          <div class="empty-sub">No pending requests. They'll show here once you split an expense.</div>
+        </div>`
+      return
+    }
+
+    const byPerson = {}
+    unpaid.forEach(s => {
+      if (!byPerson[s.owed_by_name]) byPerson[s.owed_by_name] = 0
+      byPerson[s.owed_by_name] += parseFloat(s.amount_owed)
+    })
+
+    let html = ''
+    Object.entries(byPerson).forEach(([name, amount]) => {
+      const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+      html += `
+        <div class="owed-row">
+          <div class="avatar">${initials}</div>
+          <div style="flex:1;">
+            <div class="owed-name">${escHtml(name)}</div>
+          </div>
+          <div class="owed-amount">$${amount.toFixed(2)}</div>
+        </div>`
+    })
+    container.innerHTML = html
   }
+
+  function renderCategories(expenses, startOfMonth) {
+    const container = document.getElementById('categoryContainer')
+    const thisMonth = expenses.filter(e => e.expense_date >= startOfMonth)
+
+    if (thisMonth.length === 0) {
+      container.innerHTML = '<div class="empty-sub" style="text-align:center;">No spending this month yet.</div>'
+      return
+    }
+
+    const byCat = {}
+    thisMonth.forEach(e => {
+      const cat = e.category || 'Other'
+      byCat[cat] = (byCat[cat] || 0) + parseFloat(e.total_amount || 0)
+    })
+
+    const max = Math.max(...Object.values(byCat))
+    let html = ''
+    Object.entries(byCat).sort((a,b) => b[1]-a[1]).forEach(([cat, amt]) => {
+      const pct = Math.round((amt / max) * 100)
+      html += `
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <div style="font-size:12px; color:var(--text2); width:90px; flex-shrink:0;">${escHtml(cat)}</div>
+          <div style="flex:1; height:4px; background:var(--bg4); border-radius:2px; overflow:hidden;">
+            <div style="height:100%; width:${pct}%; background:var(--accent); border-radius:2px;"></div>
+          </div>
+          <div style="font-size:12px; font-family:var(--ff-m); color:var(--text2); width:54px; text-align:right;">$${amt.toFixed(0)}</div>
+        </div>`
+    })
+    container.innerHTML = html
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  }
+
+  // ─────────────────────────────────────────────
+  //  REFRESH
+  // ─────────────────────────────────────────────
+  document.getElementById('refreshTip').addEventListener('click', (e) => {
+    e.preventDefault()
+    document.getElementById('txnContainer').innerHTML = '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
+    document.getElementById('owedContainer').innerHTML = '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
+    loadDashboard()
+  })
+
+  // ─────────────────────────────────────────────
+  //  INIT
+  // ─────────────────────────────────────────────
+  loadDashboard()
 </script>
 
 </body>
