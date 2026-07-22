@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tillerman — Transaction Details</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0C0C0D;--bg2:#131315;--bg3:#1A1A1E;--bg4:#222227;
+  --border:rgba(255,255,255,.06);--border2:rgba(255,255,255,.11);
+  --text:#EDEAE2;--text2:#8E8C84;--text3:#4E4C47;
+  --accent:#C8F55A;--accent2:#A8D848;--adim:rgba(200,245,90,.08);--aborder:rgba(200,245,90,.22);
+  --blue:#6B9FFF;--bdim:rgba(107,159,255,.09);--red:#FF6E6E;--amber:#F7CA45;
+  --ff-d:'Fraunces',Georgia,serif;--ff-b:'DM Sans',sans-serif;--ff-m:'DM Mono',monospace;
+  --r:10px;--rl:16px
+}
+body{background:var(--bg);color:var(--text);font-family:var(--ff-b);font-size:14px;line-height:1.5;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(circle,rgba(255,255,255,.022) 1px,transparent 1px);background-size:28px 28px}
+nav{height:56px;padding:0 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;background:rgba(12,12,13,.92);backdrop-filter:blur(18px);border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text)}
+.mark{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#0C0C0D;display:flex;align-items:center;justify-content:center;font-family:var(--ff-d);font-weight:500}
+.wordmark{font-family:var(--ff-d);font-size:17px;font-weight:500}
+.back{padding:7px 14px;border:1px solid var(--border2);border-radius:8px;text-decoration:none;color:var(--text2);font-size:12px}
+.back:hover{color:var(--text);border-color:var(--aborder)}
+.shell{max-width:1000px;margin:0 auto;padding:32px 28px 60px;position:relative;z-index:1}
+.header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:24px}
+.kicker{font-family:var(--ff-m);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.title{font-family:var(--ff-d);font-size:28px;font-weight:300;letter-spacing:-.6px}
+.subtitle{font-family:var(--ff-m);font-size:12px;color:var(--text3);margin-top:5px}
+.amount{text-align:right;font-family:var(--ff-d);font-size:32px;font-weight:300;color:var(--accent)}
+.status{display:inline-flex;margin-top:6px;padding:3px 8px;border-radius:20px;font:10px var(--ff-m);background:var(--adim);color:var(--accent);border:1px solid var(--aborder)}
+.grid{display:grid;grid-template-columns:1.35fr .65fr;gap:16px}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
+.panel-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.panel-title{font-family:var(--ff-d);font-size:14px;font-weight:500}
+.panel-sub{font:10px var(--ff-m);color:var(--text3)}
+.detail-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border)}
+.detail{background:var(--bg2);padding:15px 18px}
+.detail-label{font:10px var(--ff-m);color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.detail-value{font-size:13px;color:var(--text);margin-top:5px;word-break:break-word}
+.item-row{display:grid;grid-template-columns:minmax(0,1fr) 80px 110px;gap:12px;align-items:center;padding:13px 18px;border-bottom:1px solid var(--border)}
+.item-row:last-child{border-bottom:none}
+.item-name{font-size:13px;font-weight:500}
+.item-meta{font:10px var(--ff-m);color:var(--text3);margin-top:2px}
+.item-price{text-align:right;font:13px var(--ff-m)}
+.assignment{text-align:right;font-size:11px;color:var(--blue)}
+.person-row{padding:14px 18px;border-bottom:1px solid var(--border)}
+.person-row:last-child{border-bottom:none}
+.person-top{display:flex;align-items:center;gap:10px}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--bdim);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;border:1px solid rgba(107,159,255,.16)}
+.person-info{flex:1;min-width:0}
+.person-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person-detail{font:10px var(--ff-m);color:var(--text3);margin-top:2px}
+.person-amount{font:14px var(--ff-m);color:var(--blue)}
+.track{height:4px;background:var(--bg4);border-radius:10px;overflow:hidden;margin-top:10px}
+.fill{height:100%;background:var(--blue)}
+.summary{padding:16px 18px}
+.sum-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:12px;color:var(--text2)}
+.sum-row strong{font-family:var(--ff-m);color:var(--text)}
+.sum-row.total{border-top:1px solid var(--border);margin-top:7px;padding-top:13px}
+.empty{padding:35px 20px;text-align:center;color:var(--text3);font-size:12px}
+.actions{display:flex;gap:8px;margin-top:16px}
+.btn{flex:1;display:flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:9px;text-decoration:none;font-size:12px;border:1px solid var(--border2);color:var(--text2);background:var(--bg2)}
+.btn:hover{color:var(--text);border-color:var(--aborder)}
+.btn.accent{background:var(--accent);color:#0C0C0D;border-color:var(--accent)}
+@media(max-width:760px){
+  nav{padding:0 16px}.shell{padding:24px 16px 50px}.grid{grid-template-columns:1fr}.header{flex-direction:column}.amount{text-align:left}.detail-grid{grid-template-columns:1fr}.item-row{grid-template-columns:minmax(0,1fr) 70px}.assignment{grid-column:1/-1;text-align:left}
+}
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html"><div class="mark">T</div><span class="wordmark">Tillerman</span></a>
+  <a class="back" href="index.html">← Dashboard</a>
+</nav>
+
+<main class="shell" id="page">
+  <div class="empty">Loading transaction…</div>
+</main>
+
+<script>
+const STORAGE_KEY = 'tillerman_expenses'
+
+function esc(value=''){
+  return String(value)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;')
+}
+
+function money(value){
+  return '$' + Number(value || 0).toFixed(2)
+}
+
+function getExpenses(){
+  try{
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    return Array.isArray(data) ? data : []
+  }catch(error){
+    console.error(error)
+    return []
+  }
+}
+
+function getId(){
+  return new URLSearchParams(window.location.search).get('id')
+}
+
+function getAssignmentLabel(item){
+  const names = Array.isArray(item.assignees) ? item.assignees : []
+  const splitType = item.splitType || item.split_type || 'mine'
+  if(splitType === 'mine') return 'You'
+  if(names.length === 0) return splitType === 'theirs' ? 'Other person' : 'Split'
+  return names.map(name => {
+    if(typeof name === 'string') return name === 'me' ? 'You' : name
+    return name?.name || 'Person'
+  }).join(', ')
+}
+
+function render(){
+  const id = getId()
+  const expense = getExpenses().find(item => String(item.id) === String(id))
+  const page = document.getElementById('page')
+
+  if(!expense){
+    page.innerHTML = `
+      <div class="panel">
+        <div class="empty">This transaction could not be found in this browser.</div>
+      </div>
+      <div class="actions"><a class="btn accent" href="index.html">Return to dashboard</a></div>`
+    return
+  }
+
+  const amount = Number(expense.total_amount || expense.amount || 0)
+  const splits = Array.isArray(expense.splits) ? expense.splits : []
+  const unpaid = splits.filter(split => !split.is_paid)
+  const owed = unpaid.reduce((sum, split) => sum + Number(split.amount_owed || split.amount || 0), 0)
+  const yourShare = Math.max(0, amount - owed)
+  const items = Array.isArray(expense.items) ? expense.items : []
+
+  const byPerson = {}
+  unpaid.forEach(split => {
+    const name = split.owed_by_name || split.name || 'Unnamed person'
+    if(!byPerson[name]) byPerson[name] = {amount:0, phone:split.owed_by_phone || split.phone || '', count:0}
+    byPerson[name].amount += Number(split.amount_owed || split.amount || 0)
+    byPerson[name].count += 1
+  })
+
+  const people = Object.entries(byPerson).sort((a,b) => b[1].amount - a[1].amount)
+  const maxPerson = Math.max(...people.map(([,info]) => info.amount), 1)
+  const date = new Date(expense.expense_date || expense.created_at || Date.now())
+    .toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})
+  const payment = expense.payment_method || expense.card_type || 'Not specified'
+  const last4 = expense.card_last4 || expense.last4 || ''
+  const paymentDisplay = last4 ? `${payment} •••• ${esc(last4)}` : esc(payment)
+  const merchant = expense.merchant || expense.description || 'Unnamed expense'
+  const statusText = owed > 0 ? `${unpaid.length} pending balance${unpaid.length===1?'':'s'}` : 'No outstanding balance'
+
+  const itemHtml = items.length ? items.map(item => {
+    const qty = Number(item.qty || item.quantity || 1)
+    const unit = Number(item.unitPrice ?? item.unit_price ?? 0)
+    const total = qty * unit
+    return `
+      <div class="item-row">
+        <div>
+          <div class="item-name">${esc(item.name || item.item_name || 'Unnamed item')}</div>
+          <div class="item-meta">Qty ${qty} · ${money(unit)} each</div>
+        </div>
+        <div class="item-price">${money(total)}</div>
+        <div class="assignment">${esc(getAssignmentLabel(item))}</div>
+      </div>`
+  }).join('') : `<div class="empty">This expense does not contain item-level details.</div>`
+
+  const peopleHtml = people.length ? people.map(([name,info]) => {
+    const initials = name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0,2)
+    const width = Math.max(6, Math.round(info.amount / maxPerson * 100))
+    return `
+      <div class="person-row">
+        <div class="person-top">
+          <div class="avatar">${esc(initials || '?')}</div>
+          <div class="person-info">
+            <div class="person-name">${esc(name)}</div>
+            <div class="person-detail">${info.phone ? esc(info.phone) : 'No phone saved'} · ${info.count} unpaid allocation${info.count===1?'':'s'}</div>
+          </div>
+          <div class="person-amount">${money(info.amount)}</div>
+        </div>
+        <div class="track"><div class="fill" style="width:${width}%"></div></div>
+      </div>`
+  }).join('') : `<div class="empty">This was saved as a personal expense.</div>`
+
+  page.innerHTML = `
+    <section class="header">
+      <div>
+        <div class="kicker">Transaction distribution</div>
+        <h1 class="title">${esc(merchant)}</h1>
+        <div class="subtitle">${esc(date)} · ${esc(expense.category || 'Other')}</div>
+      </div>
+      <div>
+        <div class="amount">${money(amount)}</div>
+        <div class="status">${esc(statusText)}</div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <div>
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Items and assignments</div>
+            <div class="panel-sub">${items.length} item${items.length===1?'':'s'}</div>
+          </div>
+          ${itemHtml}
+        </section>
+
+        <section class="panel" style="margin-top:16px">
+          <div class="panel-head">
+            <div class="panel-title">Transaction details</div>
+          </div>
+          <div class="detail-grid">
+            <div class="detail"><div class="detail-label">Merchant</div><div class="detail-value">${esc(merchant)}</div></div>
+            <div class="detail"><div class="detail-label">Date</div><div class="detail-value">${esc(date)}</div></div>
+            <div class="detail"><div class="detail-label">Payment</div><div class="detail-value">${paymentDisplay}</div></div>
+            <div class="detail"><div class="detail-label">Category</div><div class="detail-value">${esc(expense.category || 'Other')}</div></div>
+            <div class="detail" style="grid-column:1/-1"><div class="detail-label">Notes</div><div class="detail-value">${esc(expense.notes || 'No notes')}</div></div>
+          </div>
+        </section>
+      </div>
+
+      <div>
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Who owes you</div>
+            <div class="panel-sub">${people.length} person${people.length===1?'':'s'}</div>
+          </div>
+          ${peopleHtml}
+        </section>
+
+        <section class="panel" style="margin-top:16px">
+          <div class="panel-head"><div class="panel-title">Distribution summary</div></div>
+          <div class="summary">
+            <div class="sum-row"><span>Total transaction</span><strong>${money(amount)}</strong></div>
+            <div class="sum-row"><span>Your share</span><strong>${money(yourShare)}</strong></div>
+            <div class="sum-row"><span>Still owed to you</span><strong>${money(owed)}</strong></div>
+            <div class="sum-row total"><span>Allocated</span><strong>${money(yourShare + owed)}</strong></div>
+          </div>
+        </section>
+
+        <div class="actions">
+          <a class="btn" href="expenses.html?edit=${encodeURIComponent(expense.id)}">Edit transaction</a>
+          <a class="btn accent" href="index.html">Done</a>
+        </div>
+      </div>
+    </div>`
+}
+
+render()
+</script>
+</body>
+</html>
