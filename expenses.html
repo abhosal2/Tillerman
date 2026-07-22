@@ -462,6 +462,12 @@ table.sheet tbody td:first-child { padding-left:20px; }
   let rows = []
 
   // ─────────────────────────────────────────────
+  //  EDIT MODE
+  // ─────────────────────────────────────────────
+  const EDIT_ID = new URLSearchParams(window.location.search).get('edit')
+  let EDITING_EXPENSE = null
+
+  // ─────────────────────────────────────────────
   //  UTILS
   // ─────────────────────────────────────────────
   function escHtml(s) {
@@ -1194,7 +1200,14 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
   function saveToLocalStorage(expense) {
     const expenses = getStoredExpenses()
-    expenses.unshift(expense)
+    const existingIndex = expenses.findIndex(item => String(item.id) === String(expense.id))
+
+    if (existingIndex >= 0) {
+      expenses[existingIndex] = expense
+    } else {
+      expenses.unshift(expense)
+    }
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses))
   }
 
@@ -1220,15 +1233,25 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
       otherAssignees.forEach(pid => {
         const person = getPerson(pid)
-        const name = person?.name || pid
-        totalsByPerson[name] = (totalsByPerson[name] || 0) + amountPerPerson
+        const key = person?.id || pid
+
+        if (!totalsByPerson[key]) {
+          totalsByPerson[key] = {
+            person_id: key,
+            owed_by_name: person?.name || pid,
+            owed_by_phone: person?.phone || '',
+            amount_owed: 0,
+            is_paid: false
+          }
+        }
+
+        totalsByPerson[key].amount_owed += amountPerPerson
       })
     })
 
-    return Object.entries(totalsByPerson).map(([name, amount]) => ({
-      owed_by_name: name,
-      amount_owed: Number(amount.toFixed(2)),
-      is_paid: false
+    return Object.values(totalsByPerson).map(split => ({
+      ...split,
+      amount_owed: Number(split.amount_owed.toFixed(2))
     }))
   }
 
@@ -1251,7 +1274,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
         const date = document.getElementById('purchaseDate').value || new Date().toISOString().split('T')[0]
 
         const expense = {
-          id: createId(),
+          id: EDITING_EXPENSE?.id || createId(),
           merchant: document.getElementById('merchantName').value.trim() || 'Unknown merchant',
           total_amount: Number(total.toFixed(2)),
           category: document.getElementById('category').value || 'Other',
@@ -1263,7 +1286,8 @@ table.sheet tbody td:first-child { padding-left:20px; }
           card_last4: document.getElementById('cardLast4').value.replace(/\D/g,'').slice(-4),
           expense_date: date,
           notes: document.getElementById('notes').value.trim(),
-          created_at: new Date().toISOString(),
+          created_at: EDITING_EXPENSE?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
           source: 'receipt',
           receipt_file_name: document.getElementById('fileInput').files[0]?.name || '',
           items: rows.map(row => ({
@@ -1272,6 +1296,14 @@ table.sheet tbody td:first-child { padding-left:20px; }
             qty: row.qty,
             unitPrice: row.unitPrice,
             assignees: [...row.assignees],
+            assigneeDetails: row.assignees.map(pid => {
+              const person = getPerson(pid)
+              return {
+                id: pid,
+                name: person?.name || (pid === 'me' ? 'Me (you)' : pid),
+                phone: person?.phone || ''
+              }
+            }),
             splitType: row.splitType
           })),
           splits: buildReceiptSplits()
@@ -1302,14 +1334,15 @@ table.sheet tbody td:first-child { padding-left:20px; }
         const owedTotal = splitCount > 1 ? amt - (amt / splitCount) : 0
 
         const expense = {
-          id: createId(),
+          id: EDITING_EXPENSE?.id || createId(),
           merchant: desc,
           total_amount: Number(amt.toFixed(2)),
           category: document.getElementById('m-cat').value || 'Other',
           payment_method: document.getElementById('m-card').value || '',
           expense_date: document.getElementById('m-date').value || new Date().toISOString().split('T')[0],
           notes: document.getElementById('m-notes').value.trim(),
-          created_at: new Date().toISOString(),
+          created_at: EDITING_EXPENSE?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
           source: 'manual',
           split_type: splitValue,
           splits: owedTotal > 0 ? [{
@@ -1323,13 +1356,162 @@ table.sheet tbody td:first-child { padding-left:20px; }
       }
 
       hideSaving()
-      showToast('Expense saved on this device!')
+      showToast(EDITING_EXPENSE ? 'Transaction updated!' : 'Expense saved on this device!')
       setTimeout(() => window.location.href = 'index.html', 650)
     } catch (error) {
       console.error(error)
       hideSaving()
       showToast('Could not save the expense on this device.')
     }
+  }
+
+  // ─────────────────────────────────────────────
+  //  LOAD EXISTING TRANSACTION FOR EDITING
+  // ─────────────────────────────────────────────
+  function splitPaymentMethod(paymentMethod = '', savedLast4 = '') {
+    const text = String(paymentMethod)
+    const detected = text.match(/(?:••••|\*{4}|x{4,})\s*(\d{4})/i)
+    const last4 = savedLast4 || detected?.[1] || ''
+    const type = text
+      .replace(/(?:••••|\*{4}|x{4,})\s*\d{4}/ig, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    return { type, last4 }
+  }
+
+  function addEditingPerson(person) {
+    if (!person || !person.id || person.id === 'me') return
+
+    const existing = PEOPLE.find(item => item.id === person.id)
+    if (!existing) {
+      PEOPLE.push({
+        id: person.id,
+        name: person.name || 'Unnamed person',
+        phone: person.phone || '',
+        color: COLORS[PEOPLE.length % COLORS.length]
+      })
+    }
+
+    if (!participants.includes(person.id)) participants.push(person.id)
+  }
+
+  function rebuildPeopleForExistingExpense(expense) {
+    const knownByName = new Map()
+
+    ;(expense.splits || []).forEach((split, index) => {
+      const id = split.person_id || `edit-person-${index + 1}`
+      const person = {
+        id,
+        name: split.owed_by_name || split.name || `Person ${index + 1}`,
+        phone: split.owed_by_phone || split.phone || ''
+      }
+      addEditingPerson(person)
+      knownByName.set(person.name, person)
+    })
+
+    ;(expense.items || []).forEach(item => {
+      ;(item.assigneeDetails || []).forEach(detail => addEditingPerson(detail))
+    })
+
+    return knownByName
+  }
+
+  function normalizeExistingRows(expense) {
+    const knownByName = rebuildPeopleForExistingExpense(expense)
+    const fallbackPeople = PEOPLE.filter(person => person.id !== 'me')
+    let fallbackIndex = 0
+
+    return (expense.items || []).map((item, index) => {
+      let assignees = Array.isArray(item.assignees) ? [...item.assignees] : []
+
+      if (Array.isArray(item.assigneeDetails) && item.assigneeDetails.length) {
+        assignees = item.assigneeDetails.map(detail => {
+          addEditingPerson(detail)
+          return detail.id
+        })
+      } else {
+        assignees = assignees.map(pid => {
+          if (pid === 'me') return 'me'
+          if (getPerson(pid)) return pid
+
+          const fallback = fallbackPeople[fallbackIndex % Math.max(fallbackPeople.length, 1)]
+          fallbackIndex += 1
+          return fallback?.id || pid
+        })
+      }
+
+      return {
+        id: item.id || Date.now() + index,
+        name: item.name || item.item_name || 'Unnamed item',
+        qty: Number(item.qty ?? item.quantity ?? 1),
+        unitPrice: Number(item.unitPrice ?? item.unit_price ?? 0),
+        assignees,
+        splitType: item.splitType || item.split_type || 'mine'
+      }
+    })
+  }
+
+  function loadExistingExpenseForEdit() {
+    if (!EDIT_ID) return
+
+    const expense = getStoredExpenses().find(item => String(item.id) === String(EDIT_ID))
+    if (!expense) {
+      showToast('The selected transaction could not be found.')
+      return
+    }
+
+    EDITING_EXPENSE = expense
+    document.title = 'Tillerman — Edit Transaction'
+    document.querySelector('.page-title').innerHTML = 'Edit <em>transaction</em>'
+    document.querySelector('.page-sub').textContent = 'Review and update the saved transaction'
+    document.getElementById('saveBtn').textContent = 'Update transaction →'
+
+    if (expense.source === 'manual' || !Array.isArray(expense.items) || expense.items.length === 0) {
+      switchTab('manual')
+      document.getElementById('m-desc').value = expense.merchant || expense.description || ''
+      document.getElementById('m-amount').value = Number(expense.total_amount || expense.amount || 0).toFixed(2)
+      document.getElementById('m-date').value = expense.expense_date || ''
+      document.getElementById('m-cat').value = expense.category || ''
+      document.getElementById('m-card').value = expense.payment_method || ''
+      document.getElementById('m-split').value = expense.split_type || 'mine'
+      document.getElementById('m-notes').value = expense.notes || ''
+      manualCalc()
+      updateSubmitBar()
+      return
+    }
+
+    switchTab('receipt')
+    rows = normalizeExistingRows(expense)
+
+    document.getElementById('step1-section').style.display = 'none'
+    document.getElementById('step2-section').style.display = 'block'
+    document.getElementById('step3-section').style.display = 'block'
+    document.getElementById('step2-badge').classList.add('done')
+    document.getElementById('sheet-title').textContent =
+      'Receipt items — ' + (expense.receipt_file_name || expense.merchant || 'Saved transaction')
+
+    document.getElementById('merchantName').value = expense.merchant || ''
+    document.getElementById('purchaseDate').value = expense.expense_date || ''
+    document.getElementById('category').value = expense.category || ''
+
+    const payment = splitPaymentMethod(expense.payment_method, expense.card_last4)
+    document.getElementById('payMethod').value = payment.type
+    if (!document.getElementById('payMethod').value && payment.type) {
+      const option = document.createElement('option')
+      option.value = payment.type
+      option.textContent = payment.type
+      document.getElementById('payMethod').appendChild(option)
+      document.getElementById('payMethod').value = payment.type
+    }
+
+    document.getElementById('cardLast4').value = payment.last4
+    document.getElementById('notes').value = expense.notes || ''
+
+    updatePeopleBar()
+    renderSheet()
+    updateTotals()
+    updateSubmitBar()
   }
 
   // ─────────────────────────────────────────────
@@ -1340,6 +1522,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   document.getElementById('m-date').value       = new Date().toISOString().split('T')[0]
   updatePeopleBar()
   updateSubmitBar()
+  loadExistingExpenseForEdit()
 </script>
 </body>
 </html>
