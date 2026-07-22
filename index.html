@@ -8,16 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
-<!-- ── SUPABASE SDK ── -->
-<script type="importmap">
-{
-  "imports": {
-    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
-  }
-}
-</script>
-<script type="module" src="supabase.js"></script>
-<!-- ─────────────────────────── -->
+
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -164,7 +155,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 
   <div class="security-bar">
     <div class="sec-dot"></div>
-    <span>No login required — your data is saved automatically to this device's Tillerman account.</span>
+    <span>Local prototype — data is stored only in this browser for now.</span>
   </div>
 
   <div class="stat-strip">
@@ -218,7 +209,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     <a href="#" class="tip-card" id="refreshTip">
       <div class="tip-icon">🔄</div>
       <div class="tip-title">Refresh data</div>
-      <div class="tip-desc">Reload the dashboard with the latest saved expenses from your database.</div>
+      <div class="tip-desc">Reload the dashboard with the latest expenses saved in this browser.</div>
       <div class="tip-arrow">Refresh →</div>
     </a>
   </div>
@@ -232,97 +223,99 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   </div>
 </footer>
 
-<!-- ── PAGE LOGIC (module so it can import supabase) ── -->
-<script type="module">
-  import { supabase } from './supabase.js'
+<!-- ── PAGE LOGIC ── -->
+<script>
+  // Expenses are read from localStorage so the interface remains functional
+  // while the backend is rebuilt from scratch.
 
-  // ─────────────────────────────────────────────
-  //  NO LOGIN REQUIRED — anonymous session
-  //  This silently creates (or reuses) a device-local
-  //  Supabase user so all your expense data is saved
-  //  to a real account behind the scenes, with no
-  //  login screen in the way.
-  // ─────────────────────────────────────────────
-  async function ensureSession() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) return session
-
-    const { data, error } = await supabase.auth.signInAnonymously()
-    if (error) {
-      console.error('Anonymous sign-in failed:', error.message)
-      document.getElementById('subgreet').textContent =
-        'Could not connect — check that Anonymous Sign-ins is enabled in Supabase → Authentication → Providers.'
-      return null
-    }
-    return data.session
-  }
-
-  const session = await ensureSession()
-  const USER_ID = session?.user?.id
+  const STORAGE_KEY = 'tillerman_expenses'
 
   // ─────────────────────────────────────────────
   //  TIME OF DAY GREETING
   // ─────────────────────────────────────────────
-  const hour = new Date().getHours()
-  document.getElementById('todWord').textContent = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
-  const monthName = new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' })
+  const now = new Date()
+  const hour = now.getHours()
+  const monthName = now.toLocaleDateString('en-US', { month:'long', year:'numeric' })
+
+  document.getElementById('todWord').textContent =
+    hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
   document.getElementById('monthLabel').textContent = monthName
   document.getElementById('footMonth').textContent = monthName
 
   // ─────────────────────────────────────────────
+  //  LOCAL DATA HELPERS
+  // ─────────────────────────────────────────────
+  function getExpenses() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+      return Array.isArray(saved) ? saved : []
+    } catch (error) {
+      console.error('Could not read local expenses:', error)
+      return []
+    }
+  }
+
+  function getAllSplits(expenses) {
+    return expenses.flatMap(expense =>
+      Array.isArray(expense.splits)
+        ? expense.splits.map(split => ({ ...split, expense_id: expense.id }))
+        : []
+    )
+  }
+
+  // ─────────────────────────────────────────────
   //  LOAD DASHBOARD DATA
   // ─────────────────────────────────────────────
-  async function loadDashboard() {
-    if (!USER_ID) return
+  function loadDashboard() {
+    const expenses = getExpenses().sort((a, b) => {
+      const aDate = new Date(a.created_at || a.expense_date || 0)
+      const bDate = new Date(b.created_at || b.expense_date || 0)
+      return bDate - aDate
+    })
+    const splits = getAllSplits(expenses)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
-
-    const { data: expenses, error: expErr } = await supabase
-      .from('expenses')
-      .select('*')
-      .eq('user_id', USER_ID)
-      .order('created_at', { ascending: false })
-
-    if (expErr) {
-      document.getElementById('subgreet').textContent = 'Error loading data: ' + expErr.message
-      return
-    }
-
-    const { data: splits } = await supabase
-      .from('splits')
-      .select('*')
-      .in('expense_id', (expenses || []).map(e => e.id))
-
-    renderStats(expenses || [], splits || [], startOfMonth)
-    renderTransactions(expenses || [], splits || [])
-    renderOwed(splits || [], expenses || [])
-    renderCategories(expenses || [], startOfMonth)
+    renderStats(expenses, splits, startOfMonth)
+    renderTransactions(expenses, splits)
+    renderOwed(splits)
+    renderCategories(expenses, startOfMonth)
 
     document.getElementById('subgreet').textContent =
-      (expenses?.length ? expenses.length + ' expenses logged' : 'No expenses logged yet') + ' · ' + monthName
+      (expenses.length ? `${expenses.length} expenses saved locally` : 'No expenses logged yet') +
+      ' · ' + monthName
+  }
+
+  function expenseDate(expense) {
+    return new Date(expense.expense_date || expense.created_at || 0)
   }
 
   function renderStats(expenses, splits, startOfMonth) {
-    const thisMonth = expenses.filter(e => e.expense_date >= startOfMonth)
-    const totalThisMonth = thisMonth.reduce((s, e) => s + parseFloat(e.total_amount || 0), 0)
+    const thisMonth = expenses.filter(expense => expenseDate(expense) >= startOfMonth)
+    const totalThisMonth = thisMonth.reduce((sum, expense) =>
+      sum + Number(expense.total_amount || expense.amount || 0), 0)
 
-    const unpaidSplits = splits.filter(s => !s.is_paid)
-    const owedTotal = unpaidSplits.reduce((s, x) => s + parseFloat(x.amount_owed || 0), 0)
+    const unpaidSplits = splits.filter(split => !split.is_paid)
+    const owedTotal = unpaidSplits.reduce((sum, split) =>
+      sum + Number(split.amount_owed || split.amount || 0), 0)
 
-    const allTotal = expenses.reduce((s, e) => s + parseFloat(e.total_amount || 0), 0)
-    const allOwed  = splits.reduce((s, x) => s + parseFloat(x.amount_owed || 0), 0)
-    const netCost  = allTotal - allOwed
+    const allTotal = expenses.reduce((sum, expense) =>
+      sum + Number(expense.total_amount || expense.amount || 0), 0)
+    const allOwed = splits.reduce((sum, split) =>
+      sum + Number(split.amount_owed || split.amount || 0), 0)
 
     document.getElementById('statTotal').textContent = '$' + totalThisMonth.toFixed(2)
-    document.getElementById('statTotalHint').textContent = thisMonth.length + ' expense' + (thisMonth.length===1?'':'s') + ' this month'
+    document.getElementById('statTotalHint').textContent =
+      `${thisMonth.length} expense${thisMonth.length === 1 ? '' : 's'} this month`
     document.getElementById('statOwed').textContent = '$' + owedTotal.toFixed(2)
-    document.getElementById('statOwedHint').textContent = unpaidSplits.length ? unpaidSplits.length + ' pending' : 'No splits yet'
-    document.getElementById('statNet').textContent = '$' + netCost.toFixed(2)
+    document.getElementById('statOwedHint').textContent =
+      unpaidSplits.length ? `${unpaidSplits.length} pending` : 'No splits yet'
+    document.getElementById('statNet').textContent = '$' + (allTotal - allOwed).toFixed(2)
     document.getElementById('statCount').textContent = expenses.length
   }
 
   function renderTransactions(expenses, splits) {
     const container = document.getElementById('txnContainer')
+
     if (expenses.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
@@ -334,39 +327,43 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       return
     }
 
-    const icons = { Groceries:'🛒', Dining:'🍽️', Transport:'⛽', Entertainment:'🎬', Health:'💊', Household:'🏠', Other:'📦' }
+    const icons = {
+      Groceries:'🛒', Dining:'🍽️', Transport:'⛽', Entertainment:'🎬',
+      Health:'💊', Household:'🏠', Other:'📦'
+    }
 
     let html = '<div class="txn-list">'
-    expenses.slice(0, 8).forEach(e => {
-      const itemSplits = splits.filter(s => s.expense_id === e.id)
-      const hasUnpaid = itemSplits.some(s => !s.is_paid)
-      const hasAny = itemSplits.length > 0
+    expenses.slice(0, 8).forEach(expense => {
+      const itemSplits = splits.filter(split => split.expense_id === expense.id)
+      const hasUnpaid = itemSplits.some(split => !split.is_paid)
       const badge = hasUnpaid
         ? '<span class="txn-badge badge-pending">split pending</span>'
-        : hasAny
+        : itemSplits.length
           ? '<span class="txn-badge badge-paid">✓ all paid</span>'
           : '<span class="txn-badge badge-personal">personal</span>'
-      const date = new Date(e.expense_date || e.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })
+
+      const date = expenseDate(expense).toLocaleDateString('en-US', { month:'short', day:'numeric' })
+      const amount = Number(expense.total_amount || expense.amount || 0)
+
       html += `
         <div class="txn-row">
-          <div class="txn-icon">${icons[e.category] || '💳'}</div>
+          <div class="txn-icon">${icons[expense.category] || '💳'}</div>
           <div class="txn-info">
-            <div class="txn-name">${escHtml(e.merchant || 'Unnamed expense')}</div>
-            <div class="txn-meta">${date}${e.payment_method ? ' · ' + escHtml(e.payment_method) : ''}</div>
+            <div class="txn-name">${escHtml(expense.merchant || expense.description || 'Unnamed expense')}</div>
+            <div class="txn-meta">${date}${expense.payment_method ? ' · ' + escHtml(expense.payment_method) : ''}</div>
           </div>
           <div class="txn-right">
-            <div class="txn-amount">$${parseFloat(e.total_amount).toFixed(2)}</div>
+            <div class="txn-amount">$${amount.toFixed(2)}</div>
             ${badge}
           </div>
         </div>`
     })
-    html += '</div>'
-    container.innerHTML = html
+    container.innerHTML = html + '</div>'
   }
 
-  function renderOwed(splits, expenses) {
+  function renderOwed(splits) {
     const container = document.getElementById('owedContainer')
-    const unpaid = splits.filter(s => !s.is_paid)
+    const unpaid = splits.filter(split => !split.is_paid)
 
     if (unpaid.length === 0) {
       container.innerHTML = `
@@ -378,74 +375,71 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     }
 
     const byPerson = {}
-    unpaid.forEach(s => {
-      if (!byPerson[s.owed_by_name]) byPerson[s.owed_by_name] = 0
-      byPerson[s.owed_by_name] += parseFloat(s.amount_owed)
+    unpaid.forEach(split => {
+      const name = split.owed_by_name || split.name || 'Unnamed person'
+      byPerson[name] = (byPerson[name] || 0) + Number(split.amount_owed || split.amount || 0)
     })
 
-    let html = ''
-    Object.entries(byPerson).forEach(([name, amount]) => {
-      const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-      html += `
+    container.innerHTML = Object.entries(byPerson).map(([name, amount]) => {
+      const initials = name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
+      return `
         <div class="owed-row">
-          <div class="avatar">${initials}</div>
-          <div style="flex:1;">
-            <div class="owed-name">${escHtml(name)}</div>
-          </div>
+          <div class="avatar">${escHtml(initials)}</div>
+          <div style="flex:1;"><div class="owed-name">${escHtml(name)}</div></div>
           <div class="owed-amount">$${amount.toFixed(2)}</div>
         </div>`
-    })
-    container.innerHTML = html
+    }).join('')
   }
 
   function renderCategories(expenses, startOfMonth) {
     const container = document.getElementById('categoryContainer')
-    const thisMonth = expenses.filter(e => e.expense_date >= startOfMonth)
+    const thisMonth = expenses.filter(expense => expenseDate(expense) >= startOfMonth)
 
     if (thisMonth.length === 0) {
       container.innerHTML = '<div class="empty-sub" style="text-align:center;">No spending this month yet.</div>'
       return
     }
 
-    const byCat = {}
-    thisMonth.forEach(e => {
-      const cat = e.category || 'Other'
-      byCat[cat] = (byCat[cat] || 0) + parseFloat(e.total_amount || 0)
+    const byCategory = {}
+    thisMonth.forEach(expense => {
+      const category = expense.category || 'Other'
+      byCategory[category] = (byCategory[category] || 0) + Number(expense.total_amount || expense.amount || 0)
     })
 
-    const max = Math.max(...Object.values(byCat))
-    let html = ''
-    Object.entries(byCat).sort((a,b) => b[1]-a[1]).forEach(([cat, amt]) => {
-      const pct = Math.round((amt / max) * 100)
-      html += `
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-          <div style="font-size:12px; color:var(--text2); width:90px; flex-shrink:0;">${escHtml(cat)}</div>
-          <div style="flex:1; height:4px; background:var(--bg4); border-radius:2px; overflow:hidden;">
-            <div style="height:100%; width:${pct}%; background:var(--accent); border-radius:2px;"></div>
-          </div>
-          <div style="font-size:12px; font-family:var(--ff-m); color:var(--text2); width:54px; text-align:right;">$${amt.toFixed(0)}</div>
-        </div>`
-    })
-    container.innerHTML = html
+    const max = Math.max(...Object.values(byCategory))
+    container.innerHTML = Object.entries(byCategory)
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, amount]) => {
+        const width = Math.round((amount / max) * 100)
+        return `
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <div style="font-size:12px; color:var(--text2); width:90px; flex-shrink:0;">${escHtml(category)}</div>
+            <div style="flex:1; height:4px; background:var(--bg4); border-radius:2px; overflow:hidden;">
+              <div style="height:100%; width:${width}%; background:var(--accent); border-radius:2px;"></div>
+            </div>
+            <div style="font-size:12px; font-family:var(--ff-m); color:var(--text2); width:54px; text-align:right;">$${amount.toFixed(0)}</div>
+          </div>`
+      }).join('')
   }
 
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  function escHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
   }
 
-  // ─────────────────────────────────────────────
-  //  REFRESH
-  // ─────────────────────────────────────────────
-  document.getElementById('refreshTip').addEventListener('click', (e) => {
-    e.preventDefault()
-    document.getElementById('txnContainer').innerHTML = '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
-    document.getElementById('owedContainer').innerHTML = '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
-    loadDashboard()
+  document.getElementById('refreshTip').addEventListener('click', event => {
+    event.preventDefault()
+    document.getElementById('txnContainer').innerHTML =
+      '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
+    document.getElementById('owedContainer').innerHTML =
+      '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
+    window.setTimeout(loadDashboard, 150)
   })
 
-  // ─────────────────────────────────────────────
-  //  INIT
-  // ─────────────────────────────────────────────
   loadDashboard()
 </script>
 
