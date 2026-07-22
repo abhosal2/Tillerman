@@ -142,6 +142,14 @@ table.sheet tbody td:first-child { padding-left:20px; }
 .add-row-btn { display:flex; align-items:center; gap:8px; width:100%; padding:12px 20px; background:transparent; border:none; color:var(--text3); font-size:12px; cursor:pointer; font-family:var(--ff-b); transition:color .2s; border-top:1px solid var(--border); }
 .add-row-btn:hover { color:var(--text2); background:var(--bg3); }
 
+
+.inline-edit-wrap { display:flex; align-items:center; gap:6px; min-width:0; }
+.inline-edit-wrap input { min-width:0; }
+.edit-mini { width:25px; height:25px; border-radius:6px; border:1px solid var(--border); background:var(--bg4); color:var(--text3); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; font-size:12px; transition:all .15s; }
+.edit-mini:hover { color:var(--accent); border-color:var(--aborder); background:var(--adim); }
+.card-last4 { font-family:var(--ff-m); letter-spacing:.12em; }
+.field-help { font-size:10px; color:var(--text3); line-height:1.4; }
+
 /* TOTALS BAR */
 .totals-bar { background:var(--bg3); border-top:1px solid var(--border2); padding:16px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
 .total-group { display:flex; align-items:baseline; gap:6px; }
@@ -345,13 +353,17 @@ table.sheet tbody td:first-child { padding-left:20px; }
               <option>Entertainment</option><option>Health</option><option>Household</option><option>Other</option>
             </select>
           </div>
-          <div class="field"><div class="label">Payment method</div>
+          <div class="field"><div class="label">Card / payment type</div>
             <select id="payMethod">
-              <option value="">Select card…</option>
-              <option>Chase Sapphire •••• 4821</option>
-              <option>Amex Gold •••• 3309</option>
+              <option value="">Select payment type…</option>
+              <option>Visa</option><option>Mastercard</option><option>Amex</option>
+              <option>Discover</option><option>Debit card</option><option>Credit card</option>
               <option>Cash</option><option>Other</option>
             </select>
+          </div>
+          <div class="field"><div class="label">Last 4 digits (optional)</div>
+            <input class="card-last4" type="text" id="cardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="e.g. 6796">
+            <div class="field-help">Filled automatically when clearly visible, or enter it yourself.</div>
           </div>
           <div class="field field-full"><div class="label">Notes (optional)</div><textarea id="notes" placeholder="e.g. birthday dinner for Sarah, weekly groceries…"></textarea></div>
         </div>
@@ -513,33 +525,49 @@ table.sheet tbody td:first-child { padding-left:20px; }
     showSaving('Reading receipt…')
 
     try {
-      const imageSource = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-        ? await renderPdfFirstPage(file)
-        : file
+      let text = ''
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 
-      const result = await Tesseract.recognize(imageSource, 'eng', {
-        logger: message => {
-          if (message.status === 'recognizing text') {
-            const pct = Math.round((message.progress || 0) * 100)
-            progress.textContent = `Reading visible text… ${pct}%`
-            document.getElementById('savingLabel').textContent = `Reading receipt… ${pct}%`
+      // PDFs often already contain selectable text. Use it first because it is
+      // much more accurate than OCR for item names, totals, dates and card digits.
+      if (isPdf) {
+        progress.textContent = 'Reading embedded PDF text…'
+        text = await extractPdfText(file)
+      }
+
+      let parsed = text.trim() ? parseReceiptText(text) : { items: [] }
+
+      // Fall back to OCR for scanned PDFs and photos.
+      if (!text.trim() || parsed.items.length === 0) {
+        const imageSource = isPdf ? await renderPdfFirstPage(file) : file
+        const result = await Tesseract.recognize(imageSource, 'eng', {
+          logger: message => {
+            if (message.status === 'recognizing text') {
+              const pct = Math.round((message.progress || 0) * 100)
+              progress.textContent = `Reading visible text… ${pct}%`
+              document.getElementById('savingLabel').textContent = `Reading receipt… ${pct}%`
+            }
           }
-        }
-      })
+        })
+        text = result?.data?.text || ''
+        if (!text.trim()) throw new Error('No readable text was found.')
+        parsed = parseReceiptText(text)
+      }
 
-      const text = result?.data?.text || ''
-      if (!text.trim()) throw new Error('No readable text was found.')
-
-      const parsed = parseReceiptText(text)
+      // Never substitute demo products. If item recognition is incomplete,
+      // preserve the visible receipt text as editable rows.
       if (parsed.items.length === 0) {
-        throw new Error('Text was found, but no item-and-price lines could be identified.')
+        parsed.items = receiptFallbackRows(text)
+      }
+      if (parsed.items.length === 0) {
+        parsed.items = [{ name: file.name.replace(/\.[^.]+$/, ''), qty: 1, unitPrice: 0 }]
       }
 
       rows = parsed.items.map((item, index) => ({
         id: Date.now() + index,
-        name: item.name,
-        qty: item.qty,
-        unitPrice: item.unitPrice,
+        name: item.name || `Receipt line ${index + 1}`,
+        qty: Number(item.qty) || 1,
+        unitPrice: Number(item.unitPrice) || 0,
         assignees: [],
         splitType: 'mine'
       }))
@@ -547,17 +575,44 @@ table.sheet tbody td:first-child { padding-left:20px; }
       showStep2(file.name)
       if (parsed.merchant) document.getElementById('merchantName').value = parsed.merchant
       if (parsed.date) document.getElementById('purchaseDate').value = parsed.date
-      if (parsed.paymentMethod) document.getElementById('payMethod').value = parsed.paymentMethod
+      if (parsed.cardType) document.getElementById('payMethod').value = parsed.cardType
+      if (parsed.lastFour) document.getElementById('cardLast4').value = parsed.lastFour
       renderSheet()
-      progress.textContent = `Read ${rows.length} item${rows.length === 1 ? '' : 's'}. Please review before saving.`
-      showToast('Receipt read. Please review the details.')
+      progress.textContent = `Loaded ${rows.length} editable line${rows.length === 1 ? '' : 's'}. Review names, prices and assignments before saving.`
+      showToast('Receipt loaded. Use the pencil icons to correct anything.')
     } catch (error) {
       console.error('Receipt reading failed:', error)
-      progress.textContent = 'Could not reliably read this receipt. Try a clearer, straighter photo or enter it manually.'
-      showToast(error.message || 'Could not read this receipt.')
+      showStep2(file.name)
+      rows = [{ id: Date.now(), name: file.name.replace(/\.[^.]+$/, ''), qty: 1, unitPrice: 0, assignees: [], splitType: 'mine' }]
+      renderSheet()
+      progress.textContent = 'The receipt could not be read reliably. An editable row was created so you can enter the visible name and price.'
+      showToast('Could not fully read the receipt. Please edit the row.')
     } finally {
       hideSaving()
     }
+  }
+
+  async function extractPdfText(file) {
+    if (!window.pdfjsLib) return ''
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+    const data = new Uint8Array(await file.arrayBuffer())
+    const pdf = await pdfjsLib.getDocument({ data }).promise
+    const page = await pdf.getPage(1)
+    const content = await page.getTextContent()
+
+    // Group words by their vertical position to rebuild receipt lines.
+    const groups = []
+    for (const item of content.items || []) {
+      const y = Math.round(item.transform?.[5] || 0)
+      let group = groups.find(g => Math.abs(g.y - y) <= 2)
+      if (!group) { group = { y, parts: [] }; groups.push(group) }
+      group.parts.push({ x: item.transform?.[4] || 0, text: item.str || '' })
+    }
+    return groups
+      .sort((a,b) => b.y - a.y)
+      .map(g => g.parts.sort((a,b) => a.x - b.x).map(p => p.text).join(' ').replace(/\s+/g,' ').trim())
+      .filter(Boolean)
+      .join('\n')
   }
 
   async function renderPdfFirstPage(file) {
@@ -566,68 +621,112 @@ table.sheet tbody td:first-child { padding-left:20px; }
     const data = new Uint8Array(await file.arrayBuffer())
     const pdf = await pdfjsLib.getDocument({ data }).promise
     const page = await pdf.getPage(1)
-    const viewport = page.getViewport({ scale: 2 })
+    const viewport = page.getViewport({ scale: 3 })
     const canvas = document.createElement('canvas')
     canvas.width = viewport.width
     canvas.height = viewport.height
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    await page.render({ canvasContext: ctx, viewport }).promise
     return canvas
+  }
+
+  function receiptFallbackRows(rawText) {
+    const ignore = /\b(total|subtotal|tax|change|approved|purchase|member|thank you|items sold|amount|visa|mastercard|amex|discover|cash|address|phone)\b/i
+    return rawText.split(/\r?\n/)
+      .map(line => line.replace(/\s+/g,' ').trim())
+      .filter(line => line.length > 2 && /[A-Za-z]/.test(line) && !ignore.test(line))
+      .slice(0, 20)
+      .map(line => ({ name: line, qty: 1, unitPrice: 0 }))
   }
 
   function parseReceiptText(rawText) {
     const rawLines = rawText.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean)
     const lines = rawLines.map(line => line.replace(/[|]/g, 'I'))
-
-    const ignoreLine = /\b(subtotal|total|tax|change|balance|amount due|tender|payment|credit|debit|visa|mastercard|master card|amex|american express|discover|cash|approval|auth|transaction|receipt|thank you|save|phone|tel|www\.|http|cashier)\b/i
-    const priceAtEnd = /(?:\$\s*)?(\d{1,5}[.,]\d{2})\s*$/
     const items = []
+    let pendingName = ''
 
-    for (const line of lines) {
-      const match = line.match(priceAtEnd)
-      if (!match || ignoreLine.test(line)) continue
-      const price = Number(match[1].replace(',', '.'))
-      if (!Number.isFinite(price) || price <= 0 || price > 10000) continue
+    const summaryLine = /\b(subtotal|total|tax|change|balance|amount(?:\s+due)?|tender|payment|approved|purchase|member|thank you|items sold|total number|cashier|whse:|trm:|transaction|receipt)\b/i
+    const paymentLine = /\b(visa|mastercard|master card|amex|american express|discover|debit|credit|cash|chip)\b/i
+    const priceLine = /(?:\$\s*)?(\d{1,5}[.,]\d{2})(-)?(?:\s+[A-Z])?\s*$/i
 
-      let name = line.slice(0, match.index).replace(/^[*#@\-.:\s]+|[*#@\-.:\s]+$/g, '').trim()
-      if (!name || /^\d+$/.test(name) || name.length < 2) continue
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      const match = line.match(priceLine)
 
-      let qty = 1
-      let unitPrice = price
-      const qtyMatch = name.match(/^(\d+(?:\.\d+)?)\s*[xX@]\s*(.+)$/)
-      if (qtyMatch) {
-        qty = Math.max(1, Number(qtyMatch[1]) || 1)
-        name = qtyMatch[2].trim()
-        unitPrice = price / qty
+      if (!match) {
+        // Preserve a likely wrapped item description for the following price line.
+        if (/[A-Za-z]{2}/.test(line) && !summaryLine.test(line) && !paymentLine.test(line) && line.length <= 60) {
+          pendingName = cleanItemName(line)
+        }
+        continue
       }
 
-      items.push({ name, qty, unitPrice: Number(unitPrice.toFixed(2)) })
+      let price = Number(match[1].replace(',', '.'))
+      const negative = Boolean(match[2]) || /(?:savings|discount|coupon)/i.test(line)
+      if (!Number.isFinite(price) || price > 10000) continue
+      if (negative) price = -price
+
+      let beforePrice = line.slice(0, match.index).trim()
+      const isSummary = summaryLine.test(beforePrice)
+
+      // Keep tax as an editable row so the displayed receipt total can match.
+      if (/\b(?:total\s+)?tax\b/i.test(beforePrice)) {
+        if (!items.some(item => /^tax$/i.test(item.name))) items.push({ name:'Tax', qty:1, unitPrice:Math.abs(price) })
+        pendingName = ''
+        continue
+      }
+
+      // Keep a real discount line, but ignore repeated savings summaries later.
+      if (negative) {
+        if (!items.some(item => item.unitPrice === price && /savings|discount/i.test(item.name))) {
+          items.push({ name:'Instant savings', qty:1, unitPrice:price })
+        }
+        pendingName = ''
+        continue
+      }
+
+      if (isSummary || paymentLine.test(beforePrice) || /^\([A-Z]\)\s*[A-Z]\b/i.test(beforePrice)) {
+        pendingName = ''
+        continue
+      }
+
+      let name = cleanItemName(beforePrice)
+      if ((!name || name.length < 3 || /^[A-Z]?$/.test(name)) && pendingName) name = pendingName
+      else if (pendingName && name.split(/\s+/).length <= 2 && !/\d/.test(pendingName)) name = `${pendingName} ${name}`.trim()
+      pendingName = ''
+
+      if (!name || /^\d+$/.test(name)) continue
+      items.push({ name, qty:1, unitPrice:Number(price.toFixed(2)) })
     }
 
-    // Remove probable duplicate OCR lines while preserving order.
+    // Some receipts print tax only in a summary line that may have been filtered.
+    if (!items.some(item => /^tax$/i.test(item.name))) {
+      const taxLine = lines.find(line => /\b(?:total\s+)?tax\b/i.test(line) && priceLine.test(line))
+      const m = taxLine?.match(priceLine)
+      if (m) items.push({ name:'Tax', qty:1, unitPrice:Number(m[1].replace(',','.')) })
+    }
+
     const seen = new Set()
     const uniqueItems = items.filter(item => {
-      const key = `${item.name.toLowerCase()}|${item.qty}|${item.unitPrice}`
+      const key = `${item.name.toLowerCase()}|${item.unitPrice}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
     })
 
-    const merchantCandidate = lines.find(line =>
-      line.length >= 3 && line.length <= 45 &&
-      /[A-Za-z]{3}/.test(line) &&
-      !ignoreLine.test(line) &&
-      !priceAtEnd.test(line) &&
-      !/\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}/.test(line)
-    ) || ''
+    let merchant = ''
+    if (lines.some(line => /\bcostco\b/i.test(line)) || lines.some(line => /TOLEDO\s*#\d+/i.test(line))) merchant = 'Costco'
+    if (!merchant) {
+      merchant = lines.find(line => line.length >= 3 && line.length <= 45 && /[A-Za-z]{3}/.test(line) && !summaryLine.test(line) && !paymentLine.test(line) && !priceLine.test(line) && !/^\d/.test(line)) || ''
+    }
 
     let date = ''
     for (const line of lines) {
       const match = line.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\b/)
       if (!match) continue
-      let year = Number(match[3])
-      if (year < 100) year += 2000
-      const month = Number(match[1])
-      const day = Number(match[2])
+      let year = Number(match[3]); if (year < 100) year += 2000
+      const month = Number(match[1]), day = Number(match[2])
       const candidate = new Date(year, month - 1, day)
       if (candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
         date = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
@@ -637,29 +736,36 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
     const joined = lines.join(' ')
     let cardType = ''
-    if (/american express|amex/i.test(joined)) cardType = 'Amex'
+    if (/costco\s+visa|\bvisa\b/i.test(joined)) cardType = 'Visa'
     else if (/master\s*card/i.test(joined)) cardType = 'Mastercard'
+    else if (/american express|amex/i.test(joined)) cardType = 'Amex'
     else if (/discover/i.test(joined)) cardType = 'Discover'
-    else if (/visa/i.test(joined)) cardType = 'Visa'
-    else if (/debit/i.test(joined)) cardType = 'Debit card'
-    else if (/credit/i.test(joined)) cardType = 'Credit card'
+    else if (/\bdebit\b/i.test(joined)) cardType = 'Debit card'
+    else if (/\bcredit\b/i.test(joined)) cardType = 'Credit card'
     else if (/\bcash\b/i.test(joined)) cardType = 'Cash'
 
-    const lastFourMatch = joined.match(/(?:ending|card|acct|account|\*{2,}|x{2,})\s*[:#-]?\s*(\d{4})\b/i)
-    const paymentMethod = cardType
-      ? `${cardType}${lastFourMatch ? ' •••• ' + lastFourMatch[1] : ''}`
-      : ''
+    const lastFourPatterns = [
+      /[X*]{4,}\s*(\d{4})\b/i,
+      /(?:ending|card|acct|account)\s*[:#-]?\s*(?:[X*•-]*\s*)?(\d{4})\b/i
+    ]
+    let lastFour = ''
+    for (const pattern of lastFourPatterns) {
+      const m = joined.match(pattern)
+      if (m) { lastFour = m[1]; break }
+    }
 
-    ensurePaymentOption(paymentMethod)
-    return { items: uniqueItems, merchant: merchantCandidate, date, paymentMethod }
+    return { items: uniqueItems, merchant, date, cardType, lastFour }
   }
 
-  function ensurePaymentOption(value) {
-    if (!value) return
-    const select = document.getElementById('payMethod')
-    if (![...select.options].some(option => option.value === value)) {
-      select.add(new Option(value, value))
-    }
+  function cleanItemName(value) {
+    return String(value || '')
+      .replace(/^E\s+/i, '')
+      .replace(/^\d{5,}\s+/, '')
+      .replace(/^\d+\s*\/\s*\d+\s*/, '')
+      .replace(/\*+/g, '')
+      .replace(/^[#@.\-:\s]+|[#@.\-:\s]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
   }
 
   document.getElementById('loadDemoBtn').addEventListener('click', loadDemo)
@@ -677,7 +783,8 @@ table.sheet tbody td:first-child { padding-left:20px; }
     document.getElementById('step3-section').style.display = 'block'
     document.getElementById('step2-badge').classList.add('done')
     document.getElementById('sheet-title').textContent = 'Receipt items — ' + title
-    document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0]
+    document.getElementById('cardLast4').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g,'').slice(0,4) })
+  document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0]
     updatePeopleBar()
     updateTotals()
   }
@@ -742,11 +849,14 @@ table.sheet tbody td:first-child { padding-left:20px; }
       tr.innerHTML = `
         <td class="row-num">${idx+1}</td>
         <td class="item-name-cell">
-          <input type="text" value="${escHtml(row.name)}"
-            style="background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:2px 0;width:100%;font-weight:500;"
-            data-row="${row.id}" data-action="name"
-            onfocus="this.style.borderBottomColor='var(--border2)'"
-            onblur="this.style.borderBottomColor='transparent'">
+          <div class="inline-edit-wrap">
+            <input type="text" value="${escHtml(row.name)}"
+              style="background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:2px 0;width:100%;font-weight:500;"
+              data-row="${row.id}" data-action="name"
+              onfocus="this.style.borderBottomColor='var(--border2)'"
+              onblur="this.style.borderBottomColor='transparent'">
+            <button class="edit-mini" type="button" data-row="${row.id}" data-action="edit-name" title="Edit item name">✎</button>
+          </div>
         </td>
         <td class="item-qty">
           <input type="number" value="${row.qty}" min="1"
@@ -756,15 +866,18 @@ table.sheet tbody td:first-child { padding-left:20px; }
             onblur="this.style.borderBottomColor='transparent'">
         </td>
         <td class="item-price">
-          <span style="color:var(--text3);font-size:11px;">$</span>
-          <input type="number" value="${row.unitPrice.toFixed(2)}" min="0" step="0.01"
-            style="width:70px;background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:2px 0;font-family:var(--ff-m);"
-            data-row="${row.id}" data-action="price"
-            onfocus="this.style.borderBottomColor='var(--border2)'"
-            onblur="this.style.borderBottomColor='transparent'">
+          <div class="inline-edit-wrap">
+            <span style="color:var(--text3);font-size:11px;">$</span>
+            <input type="number" value="${row.unitPrice.toFixed(2)}" step="0.01"
+              style="width:70px;background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:2px 0;font-family:var(--ff-m);"
+              data-row="${row.id}" data-action="price"
+              onfocus="this.style.borderBottomColor='var(--border2)'"
+              onblur="this.style.borderBottomColor='transparent'">
+            <button class="edit-mini" type="button" data-row="${row.id}" data-action="edit-price" title="Edit price">✎</button>
+          </div>
         </td>
         <td class="item-price ${row.splitType==='split'?'split':''}">$${total}</td>
-        <td><div class="assignee-cell">${assigneeHTML}</div></td>
+        <td><div class="assignee-cell">${assigneeHTML}<button class="edit-mini" type="button" data-row="${row.id}" data-action="edit-assignment" title="Edit assignment">✎</button></div></td>
         <td>
           <div class="split-toggle">
             <button class="st-btn ${stMine}"   data-row="${row.id}" data-split="mine">Mine</button>
@@ -782,9 +895,18 @@ table.sheet tbody td:first-child { padding-left:20px; }
       const t = e.target.closest('[data-action],[data-split]')
       if (!t) return
       const id = parseInt(t.dataset.row)
-      if (t.dataset.split)           setSplitType(e, id, t.dataset.split)
+      if (t.dataset.split) setSplitType(e, id, t.dataset.split)
       if (t.dataset.action==='delete') deleteRow(id)
       if (t.dataset.action==='assign') openDropdown(e, id)
+      if (t.dataset.action==='edit-assignment') openAssignmentEditor(id)
+      if (t.dataset.action==='edit-name') {
+        const input = tbody.querySelector(`input[data-row="${id}"][data-action="name"]`)
+        if (input) { input.focus(); input.select() }
+      }
+      if (t.dataset.action==='edit-price') {
+        const input = tbody.querySelector(`input[data-row="${id}"][data-action="price"]`)
+        if (input) { input.focus(); input.select() }
+      }
     }
     tbody.onchange = (e) => {
       const t = e.target
@@ -802,7 +924,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   //  ROW MUTATIONS
   // ─────────────────────────────────────────────
   function updateRowQty(id, val)   { const r=rows.find(r=>r.id===id); if(r){r.qty=Math.max(1,parseFloat(val)||1);} renderSheet() }
-  function updateRowPrice(id, val) { const r=rows.find(r=>r.id===id); if(r){r.unitPrice=Math.max(0,parseFloat(val)||0);} renderSheet() }
+  function updateRowPrice(id, val) { const r=rows.find(r=>r.id===id); if(r){ const n=parseFloat(val); r.unitPrice=Number.isFinite(n)?n:0; } renderSheet() }
   function setSplitType(event, id, type) {
     const row = rows.find(r => r.id === id)
     if (!row) return
@@ -887,6 +1009,17 @@ table.sheet tbody td:first-child { padding-left:20px; }
   //  SPLIT / THEIRS ASSIGNMENT MODAL
   // ─────────────────────────────────────────────
   let pendingAssignment = null
+
+  function openAssignmentEditor(rowId) {
+    const row = rows.find(r => r.id === rowId)
+    if (!row) return
+    if (row.splitType === 'mine') {
+      const choice = window.confirm('This item is currently yours. Click OK to split it, or Cancel to assign it entirely to someone else.')
+      openAssignModal(rowId, choice ? 'split' : 'theirs')
+    } else {
+      openAssignModal(rowId, row.splitType)
+    }
+  }
 
   function openAssignModal(rowId, splitType) {
     const row = rows.find(r => r.id === rowId)
@@ -1122,7 +1255,12 @@ table.sheet tbody td:first-child { padding-left:20px; }
           merchant: document.getElementById('merchantName').value.trim() || 'Unknown merchant',
           total_amount: Number(total.toFixed(2)),
           category: document.getElementById('category').value || 'Other',
-          payment_method: document.getElementById('payMethod').value || '',
+          payment_method: (() => {
+            const type = document.getElementById('payMethod').value || ''
+            const last4 = document.getElementById('cardLast4').value.replace(/\D/g,'').slice(-4)
+            return type && last4 ? `${type} •••• ${last4}` : type
+          })(),
+          card_last4: document.getElementById('cardLast4').value.replace(/\D/g,'').slice(-4),
           expense_date: date,
           notes: document.getElementById('notes').value.trim(),
           created_at: new Date().toISOString(),
@@ -1197,6 +1335,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   // ─────────────────────────────────────────────
   //  INIT
   // ─────────────────────────────────────────────
+  document.getElementById('cardLast4').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g,'').slice(0,4) })
   document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0]
   document.getElementById('m-date').value       = new Date().toISOString().split('T')[0]
   updatePeopleBar()
