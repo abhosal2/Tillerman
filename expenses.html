@@ -8,16 +8,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
-<!-- ── SUPABASE SDK (Step 3) ── -->
-<script type="importmap">
-{
-  "imports": {
-    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
-  }
-}
-</script>
-<script type="module" src="supabase.js"></script>
-<!-- ─────────────────────────── -->
 
 <style>
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
@@ -187,6 +177,25 @@ table.sheet tbody td:first-child { padding-left:20px; }
 @keyframes spin { to{transform:rotate(360deg);} }
 
 @keyframes fadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+@media (max-width: 760px) {
+  nav { padding:0 16px; }
+  .nav-breadcrumb { display:none; }
+  .shell { padding:0 16px 90px; }
+  .form-grid, .form-grid-3 { grid-template-columns:1fr; }
+  .field-full { grid-column:1; }
+  .submit-bar { padding:12px 16px; align-items:flex-start; }
+  .submit-summary { max-width:55%; }
+  .tabs { width:100%; }
+  .tab { flex:1; padding:7px 10px; }
+}
+
+@media (max-width: 520px) {
+  .submit-bar { flex-direction:column; }
+  .submit-summary { max-width:100%; }
+  .submit-actions { width:100%; }
+  .submit-actions > * { flex:1; justify-content:center; }
+}
+
 </style>
 </head>
 <body>
@@ -240,7 +249,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
         <div class="upload-zone" id="dropZone">
           <span class="upload-big-icon">📎</span>
           <div class="upload-label">Drop your receipt here, or click to browse</div>
-          <div class="upload-sub">Works with photos, scanned PDFs, or screenshots</div>
+          <div class="upload-sub">Choose a receipt image or PDF, then review the item list</div>
           <div class="upload-types">
             <span class="upload-type">JPG</span>
             <span class="upload-type">PNG</span>
@@ -383,16 +392,8 @@ table.sheet tbody td:first-child { padding-left:20px; }
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<!-- ── ALL LOGIC AS MODULE so it can import Supabase ── -->
-<script type="module">
-  import { supabase } from './supabase.js'
-
-  // ─────────────────────────────────────────────
-  //  PAGE GUARD — redirect if not logged in
-  // ─────────────────────────────────────────────
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) { window.location.href = 'login.html'; }
-  const USER_ID = session?.user?.id
+<!-- ── LOCAL-ONLY PAGE LOGIC ── -->
+<script>
 
   // ─────────────────────────────────────────────
   //  PEOPLE STATE
@@ -772,129 +773,159 @@ table.sheet tbody td:first-child { padding-left:20px; }
   document.getElementById('m-desc').addEventListener('input', updateSubmitBar)
 
   // ─────────────────────────────────────────────
-  //  SAVE EXPENSE — real Supabase write (Step 11)
+  //  LOCAL STORAGE
   // ─────────────────────────────────────────────
+  const STORAGE_KEY = 'tillerman_expenses'
+
+  function getStoredExpenses() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+      return Array.isArray(parsed) ? parsed : []
+    } catch (error) {
+      console.error('Could not read saved expenses:', error)
+      return []
+    }
+  }
+
+  function createId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID()
+    }
+    return 'expense-' + Date.now() + '-' + Math.random().toString(16).slice(2)
+  }
+
+  function saveToLocalStorage(expense) {
+    const expenses = getStoredExpenses()
+    expenses.unshift(expense)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses))
+  }
+
+  function buildReceiptSplits() {
+    const totalsByPerson = {}
+
+    rows.forEach(row => {
+      const rowTotal = row.qty * row.unitPrice
+      const otherAssignees = row.assignees.filter(pid => pid !== 'me')
+
+      if (otherAssignees.length === 0 || row.splitType === 'mine') return
+
+      let amountPerPerson = 0
+
+      if (row.splitType === 'theirs') {
+        amountPerPerson = rowTotal / otherAssignees.length
+      } else if (row.splitType === 'split') {
+        const totalParticipants = row.assignees.includes('me')
+          ? row.assignees.length
+          : otherAssignees.length + 1
+        amountPerPerson = rowTotal / Math.max(totalParticipants, 1)
+      }
+
+      otherAssignees.forEach(pid => {
+        const person = getPerson(pid)
+        const name = person?.name || pid
+        totalsByPerson[name] = (totalsByPerson[name] || 0) + amountPerPerson
+      })
+    })
+
+    return Object.entries(totalsByPerson).map(([name, amount]) => ({
+      owed_by_name: name,
+      amount_owed: Number(amount.toFixed(2)),
+      is_paid: false
+    }))
+  }
+
   document.getElementById('saveBtn').addEventListener('click', saveExpense)
 
-  async function saveExpense() {
+  function saveExpense() {
     const tab = activeTab()
 
-    if (tab === 'receipt') {
-      if (rows.length === 0) { showToast('No items to save. Upload a receipt or load the demo.'); return }
+    try {
+      showSaving('Saving to this device…')
 
-      showSaving('Saving expense…')
-
-      // 1. Insert the expense header
-      const { data: expense, error: expErr } = await supabase
-        .from('expenses')
-        .insert({
-          user_id:        USER_ID,
-          merchant:       document.getElementById('merchantName').value || 'Unknown merchant',
-          total_amount:   rows.reduce((s,r) => s + r.qty * r.unitPrice, 0),
-          category:       document.getElementById('category').value,
-          payment_method: document.getElementById('payMethod').value,
-          expense_date:   document.getElementById('purchaseDate').value,
-          notes:          document.getElementById('notes').value
-        })
-        .select()
-        .single()
-
-      if (expErr) {
-        hideSaving()
-        showToast('Error: ' + expErr.message)
-        return
-      }
-
-      // 2. Insert each line item + its splits
-      showSaving('Saving items…')
-      for (const row of rows) {
-        const { data: item, error: itemErr } = await supabase
-          .from('expense_items')
-          .insert({
-            expense_id: expense.id,
-            item_name:  row.name,
-            quantity:   row.qty,
-            unit_price: row.unitPrice,
-            split_type: row.splitType
-          })
-          .select()
-          .single()
-
-        if (itemErr) continue
-
-        // 3. Insert splits for this item (skip "me")
-        const splitInserts = row.assignees
-          .filter(pid => pid !== 'me')
-          .map(pid => {
-            const p = getPerson(pid)
-            return {
-              item_id:       item.id,
-              expense_id:    expense.id,
-              owed_by_name:  p?.name || pid,
-              owed_by_phone: null,
-              amount_owed:   row.splitType === 'split'
-                               ? parseFloat((row.qty * row.unitPrice / 2).toFixed(2))
-                               : parseFloat((row.qty * row.unitPrice).toFixed(2)),
-              is_paid: false
-            }
-          })
-
-        if (splitInserts.length > 0) {
-          await supabase.from('splits').insert(splitInserts)
+      if (tab === 'receipt') {
+        if (rows.length === 0) {
+          hideSaving()
+          showToast('No items to save. Upload a receipt or load the demo.')
+          return
         }
-      }
 
-      // 4. Upload receipt file to Supabase Storage if one was selected
-      const file = document.getElementById('fileInput').files[0]
-      if (file) {
-        showSaving('Uploading receipt…')
-        const path = `${USER_ID}/${expense.id}/${file.name}`
-        const { error: uploadErr } = await supabase.storage
-          .from('receipts')
-          .upload(path, file, { upsert: true })
+        const total = rows.reduce((sum, row) => sum + row.qty * row.unitPrice, 0)
+        const date = document.getElementById('purchaseDate').value || new Date().toISOString().split('T')[0]
 
-        if (!uploadErr) {
-          const { data: signed } = await supabase.storage
-            .from('receipts')
-            .createSignedUrl(path, 3600)
-          if (signed?.signedUrl) {
-            await supabase
-              .from('expenses')
-              .update({ receipt_url: signed.signedUrl })
-              .eq('id', expense.id)
-          }
+        const expense = {
+          id: createId(),
+          merchant: document.getElementById('merchantName').value.trim() || 'Unknown merchant',
+          total_amount: Number(total.toFixed(2)),
+          category: document.getElementById('category').value || 'Other',
+          payment_method: document.getElementById('payMethod').value || '',
+          expense_date: date,
+          notes: document.getElementById('notes').value.trim(),
+          created_at: new Date().toISOString(),
+          source: 'receipt',
+          receipt_file_name: document.getElementById('fileInput').files[0]?.name || '',
+          items: rows.map(row => ({
+            id: row.id,
+            name: row.name,
+            qty: row.qty,
+            unitPrice: row.unitPrice,
+            assignees: [...row.assignees],
+            splitType: row.splitType
+          })),
+          splits: buildReceiptSplits()
         }
+
+        saveToLocalStorage(expense)
+      } else {
+        const desc = document.getElementById('m-desc').value.trim()
+        const amt = parseFloat(document.getElementById('m-amount').value)
+
+        if (!desc) {
+          hideSaving()
+          showToast('Please enter a description.')
+          return
+        }
+
+        if (!Number.isFinite(amt) || amt <= 0) {
+          hideSaving()
+          showToast('Please enter a valid amount.')
+          return
+        }
+
+        const splitValue = document.getElementById('m-split').value
+        const splitCount = splitValue === 'equal2' ? 2
+                         : splitValue === 'equal3' ? 3
+                         : splitValue === 'equal4' ? 4
+                         : 1
+        const owedTotal = splitCount > 1 ? amt - (amt / splitCount) : 0
+
+        const expense = {
+          id: createId(),
+          merchant: desc,
+          total_amount: Number(amt.toFixed(2)),
+          category: document.getElementById('m-cat').value || 'Other',
+          payment_method: document.getElementById('m-card').value || '',
+          expense_date: document.getElementById('m-date').value || new Date().toISOString().split('T')[0],
+          notes: document.getElementById('m-notes').value.trim(),
+          created_at: new Date().toISOString(),
+          source: 'manual',
+          split_type: splitValue,
+          splits: owedTotal > 0 ? [{
+            owed_by_name: splitCount === 2 ? '1 other person' : `${splitCount - 1} other people`,
+            amount_owed: Number(owedTotal.toFixed(2)),
+            is_paid: false
+          }] : []
+        }
+
+        saveToLocalStorage(expense)
       }
 
       hideSaving()
-      showToast('Expense saved!')
-      setTimeout(() => window.location.href = 'index.html', 1000)
-
-    } else {
-      // MANUAL TAB
-      const desc = document.getElementById('m-desc').value.trim()
-      const amt  = parseFloat(document.getElementById('m-amount').value)
-      if (!desc)  { showToast('Please enter a description.'); return }
-      if (!amt)   { showToast('Please enter an amount.'); return }
-
-      showSaving('Saving expense…')
-
-      const { error } = await supabase.from('expenses').insert({
-        user_id:        USER_ID,
-        merchant:       desc,
-        total_amount:   amt,
-        category:       document.getElementById('m-cat').value,
-        payment_method: document.getElementById('m-card').value,
-        expense_date:   document.getElementById('m-date').value,
-        notes:          document.getElementById('m-notes').value
-      })
-
+      showToast('Expense saved on this device!')
+      setTimeout(() => window.location.href = 'index.html', 650)
+    } catch (error) {
+      console.error(error)
       hideSaving()
-
-      if (error) { showToast('Error: ' + error.message); return }
-
-      showToast('Expense saved!')
-      setTimeout(() => window.location.href = 'index.html', 1000)
+      showToast('Could not save the expense on this device.')
     }
   }
 
