@@ -9,6 +9,10 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
 
+<!-- Browser-side receipt reading. No receipt image is uploaded to Tillerman. -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+
 <style>
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 :root {
@@ -177,6 +181,24 @@ table.sheet tbody td:first-child { padding-left:20px; }
 @keyframes spin { to{transform:rotate(360deg);} }
 
 @keyframes fadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+
+/* ASSIGNMENT MODAL */
+.assign-modal-backdrop { position:fixed; inset:0; z-index:700; background:rgba(0,0,0,.68); backdrop-filter:blur(4px); display:none; align-items:center; justify-content:center; padding:20px; }
+.assign-modal-backdrop.show { display:flex; }
+.assign-modal { width:min(420px,100%); background:var(--bg2); border:1px solid var(--border2); border-radius:var(--rl); box-shadow:0 24px 80px rgba(0,0,0,.55); overflow:hidden; animation:fadeUp .18s ease both; }
+.assign-modal-head { padding:18px 20px 14px; border-bottom:1px solid var(--border); }
+.assign-modal-title { font-family:var(--ff-d); font-size:18px; }
+.assign-modal-sub { margin-top:4px; color:var(--text3); font-size:12px; }
+.assign-list { padding:10px; max-height:300px; overflow:auto; }
+.assign-option { display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:9px; cursor:pointer; }
+.assign-option:hover { background:var(--bg3); }
+.assign-option input { width:16px; height:16px; accent-color:var(--accent); }
+.assign-name { flex:1; color:var(--text); }
+.assign-phone { color:var(--text3); font-size:11px; font-family:var(--ff-m); }
+.assign-empty { padding:26px 18px; text-align:center; color:var(--text3); font-size:12px; }
+.assign-modal-actions { display:flex; justify-content:flex-end; gap:8px; padding:14px 20px; border-top:1px solid var(--border); }
+.ocr-progress { margin-top:12px; font-family:var(--ff-m); font-size:11px; color:var(--text3); min-height:17px; }
+
 @media (max-width: 760px) {
   nav { padding:0 16px; }
   .nav-breadcrumb { display:none; }
@@ -261,6 +283,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
         <input type="file" id="fileInput" accept="image/*,.pdf">
         <div style="text-align:center; margin-top:12px;">
           <button class="btn-ghost" style="font-size:11px;" id="loadDemoBtn">Or load a demo receipt to try the interface →</button>
+          <div class="ocr-progress" id="ocrProgress"></div>
         </div>
       </div>
     </div>
@@ -389,6 +412,22 @@ table.sheet tbody td:first-child { padding-left:20px; }
 <div id="dropdownOverlay" class="dropdown-overlay" style="display:none;"></div>
 <div id="personDropdown" class="person-dropdown" style="display:none;"></div>
 
+
+<!-- ASSIGNMENT MODAL -->
+<div class="assign-modal-backdrop" id="assignModalBackdrop" aria-hidden="true">
+  <div class="assign-modal" role="dialog" aria-modal="true" aria-labelledby="assignModalTitle">
+    <div class="assign-modal-head">
+      <div class="assign-modal-title" id="assignModalTitle">Assign item</div>
+      <div class="assign-modal-sub" id="assignModalSub">Choose who this item belongs to.</div>
+    </div>
+    <div class="assign-list" id="assignModalList"></div>
+    <div class="assign-modal-actions">
+      <button class="btn-ghost" id="assignCancelBtn" type="button">Cancel</button>
+      <button class="btn-accent" id="assignApplyBtn" type="button">Assign</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -400,9 +439,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   // ─────────────────────────────────────────────
   const COLORS = ['#6B9FFF','#3ED9C8','#F7CA45','#FF6E6E','#C084FC','#FB923C']
   let PEOPLE = [
-    { id:'me', name:'Me (you)', color:'#C8F55A' },
-    { id:'p1', name:'Sarah L.', color:'#6B9FFF' },
-    { id:'p2', name:'Marcus J.',color:'#3ED9C8' },
+    { id:'me', name:'Me (you)', phone:'', color:'#C8F55A' }
   ]
   let participants = ['me']
   let nextPID = 10
@@ -470,12 +507,159 @@ table.sheet tbody td:first-child { padding-left:20px; }
   })
   fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]) })
 
-  function handleFile(file) {
-    showToast('Reading receipt…')
-    setTimeout(() => {
+  async function handleFile(file) {
+    const progress = document.getElementById('ocrProgress')
+    progress.textContent = 'Preparing receipt…'
+    showSaving('Reading receipt…')
+
+    try {
+      const imageSource = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+        ? await renderPdfFirstPage(file)
+        : file
+
+      const result = await Tesseract.recognize(imageSource, 'eng', {
+        logger: message => {
+          if (message.status === 'recognizing text') {
+            const pct = Math.round((message.progress || 0) * 100)
+            progress.textContent = `Reading visible text… ${pct}%`
+            document.getElementById('savingLabel').textContent = `Reading receipt… ${pct}%`
+          }
+        }
+      })
+
+      const text = result?.data?.text || ''
+      if (!text.trim()) throw new Error('No readable text was found.')
+
+      const parsed = parseReceiptText(text)
+      if (parsed.items.length === 0) {
+        throw new Error('Text was found, but no item-and-price lines could be identified.')
+      }
+
+      rows = parsed.items.map((item, index) => ({
+        id: Date.now() + index,
+        name: item.name,
+        qty: item.qty,
+        unitPrice: item.unitPrice,
+        assignees: [],
+        splitType: 'mine'
+      }))
+
       showStep2(file.name)
-      loadDemoItems()
-    }, 900)
+      if (parsed.merchant) document.getElementById('merchantName').value = parsed.merchant
+      if (parsed.date) document.getElementById('purchaseDate').value = parsed.date
+      if (parsed.paymentMethod) document.getElementById('payMethod').value = parsed.paymentMethod
+      renderSheet()
+      progress.textContent = `Read ${rows.length} item${rows.length === 1 ? '' : 's'}. Please review before saving.`
+      showToast('Receipt read. Please review the details.')
+    } catch (error) {
+      console.error('Receipt reading failed:', error)
+      progress.textContent = 'Could not reliably read this receipt. Try a clearer, straighter photo or enter it manually.'
+      showToast(error.message || 'Could not read this receipt.')
+    } finally {
+      hideSaving()
+    }
+  }
+
+  async function renderPdfFirstPage(file) {
+    if (!window.pdfjsLib) throw new Error('PDF reader did not load.')
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+    const data = new Uint8Array(await file.arrayBuffer())
+    const pdf = await pdfjsLib.getDocument({ data }).promise
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 2 })
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    return canvas
+  }
+
+  function parseReceiptText(rawText) {
+    const rawLines = rawText.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean)
+    const lines = rawLines.map(line => line.replace(/[|]/g, 'I'))
+
+    const ignoreLine = /\b(subtotal|total|tax|change|balance|amount due|tender|payment|credit|debit|visa|mastercard|master card|amex|american express|discover|cash|approval|auth|transaction|receipt|thank you|save|phone|tel|www\.|http|cashier)\b/i
+    const priceAtEnd = /(?:\$\s*)?(\d{1,5}[.,]\d{2})\s*$/
+    const items = []
+
+    for (const line of lines) {
+      const match = line.match(priceAtEnd)
+      if (!match || ignoreLine.test(line)) continue
+      const price = Number(match[1].replace(',', '.'))
+      if (!Number.isFinite(price) || price <= 0 || price > 10000) continue
+
+      let name = line.slice(0, match.index).replace(/^[*#@\-.:\s]+|[*#@\-.:\s]+$/g, '').trim()
+      if (!name || /^\d+$/.test(name) || name.length < 2) continue
+
+      let qty = 1
+      let unitPrice = price
+      const qtyMatch = name.match(/^(\d+(?:\.\d+)?)\s*[xX@]\s*(.+)$/)
+      if (qtyMatch) {
+        qty = Math.max(1, Number(qtyMatch[1]) || 1)
+        name = qtyMatch[2].trim()
+        unitPrice = price / qty
+      }
+
+      items.push({ name, qty, unitPrice: Number(unitPrice.toFixed(2)) })
+    }
+
+    // Remove probable duplicate OCR lines while preserving order.
+    const seen = new Set()
+    const uniqueItems = items.filter(item => {
+      const key = `${item.name.toLowerCase()}|${item.qty}|${item.unitPrice}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    const merchantCandidate = lines.find(line =>
+      line.length >= 3 && line.length <= 45 &&
+      /[A-Za-z]{3}/.test(line) &&
+      !ignoreLine.test(line) &&
+      !priceAtEnd.test(line) &&
+      !/\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}/.test(line)
+    ) || ''
+
+    let date = ''
+    for (const line of lines) {
+      const match = line.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\b/)
+      if (!match) continue
+      let year = Number(match[3])
+      if (year < 100) year += 2000
+      const month = Number(match[1])
+      const day = Number(match[2])
+      const candidate = new Date(year, month - 1, day)
+      if (candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
+        date = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+        break
+      }
+    }
+
+    const joined = lines.join(' ')
+    let cardType = ''
+    if (/american express|amex/i.test(joined)) cardType = 'Amex'
+    else if (/master\s*card/i.test(joined)) cardType = 'Mastercard'
+    else if (/discover/i.test(joined)) cardType = 'Discover'
+    else if (/visa/i.test(joined)) cardType = 'Visa'
+    else if (/debit/i.test(joined)) cardType = 'Debit card'
+    else if (/credit/i.test(joined)) cardType = 'Credit card'
+    else if (/\bcash\b/i.test(joined)) cardType = 'Cash'
+
+    const lastFourMatch = joined.match(/(?:ending|card|acct|account|\*{2,}|x{2,})\s*[:#-]?\s*(\d{4})\b/i)
+    const paymentMethod = cardType
+      ? `${cardType}${lastFourMatch ? ' •••• ' + lastFourMatch[1] : ''}`
+      : ''
+
+    ensurePaymentOption(paymentMethod)
+    return { items: uniqueItems, merchant: merchantCandidate, date, paymentMethod }
+  }
+
+  function ensurePaymentOption(value) {
+    if (!value) return
+    const select = document.getElementById('payMethod')
+    if (![...select.options].some(option => option.value === value)) {
+      select.add(new Option(value, value))
+    }
   }
 
   document.getElementById('loadDemoBtn').addEventListener('click', loadDemo)
@@ -598,7 +782,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
       const t = e.target.closest('[data-action],[data-split]')
       if (!t) return
       const id = parseInt(t.dataset.row)
-      if (t.dataset.split)           setSplitType(id, t.dataset.split)
+      if (t.dataset.split)           setSplitType(e, id, t.dataset.split)
       if (t.dataset.action==='delete') deleteRow(id)
       if (t.dataset.action==='assign') openDropdown(e, id)
     }
@@ -619,7 +803,19 @@ table.sheet tbody td:first-child { padding-left:20px; }
   // ─────────────────────────────────────────────
   function updateRowQty(id, val)   { const r=rows.find(r=>r.id===id); if(r){r.qty=Math.max(1,parseFloat(val)||1);} renderSheet() }
   function updateRowPrice(id, val) { const r=rows.find(r=>r.id===id); if(r){r.unitPrice=Math.max(0,parseFloat(val)||0);} renderSheet() }
-  function setSplitType(id, type)  { const r=rows.find(r=>r.id===id); if(r) r.splitType=type; renderSheet() }
+  function setSplitType(event, id, type) {
+    const row = rows.find(r => r.id === id)
+    if (!row) return
+
+    if (type === 'mine') {
+      row.splitType = 'mine'
+      row.assignees = ['me']
+      renderSheet()
+      return
+    }
+
+    openAssignModal(id, type)
+  }
   function deleteRow(id)           { rows=rows.filter(r=>r.id!==id); renderSheet() }
 
   document.getElementById('addRowBtn').addEventListener('click', () => {
@@ -678,12 +874,81 @@ table.sheet tbody td:first-child { padding-left:20px; }
   document.getElementById('addPersonBtn').addEventListener('click', () => {
     const name = prompt('Enter person\'s name:')
     if (!name || !name.trim()) return
+    const phone = prompt('Enter phone number (optional):') || ''
     const color = COLORS[PEOPLE.length % COLORS.length]
     const pid   = 'p' + (++nextPID)
-    PEOPLE.push({ id:pid, name:name.trim(), color })
+    PEOPLE.push({ id:pid, name:name.trim(), phone:phone.trim(), color })
     participants.push(pid)
     updatePeopleBar()
     showToast('"' + name.trim() + '" added as a participant')
+  })
+
+  // ─────────────────────────────────────────────
+  //  SPLIT / THEIRS ASSIGNMENT MODAL
+  // ─────────────────────────────────────────────
+  let pendingAssignment = null
+
+  function openAssignModal(rowId, splitType) {
+    const row = rows.find(r => r.id === rowId)
+    if (!row) return
+
+    const availablePeople = PEOPLE.filter(person => person.id !== 'me' && participants.includes(person.id))
+    pendingAssignment = { rowId, splitType }
+
+    document.getElementById('assignModalTitle').textContent = splitType === 'split' ? 'Split this item' : 'Assign this item'
+    document.getElementById('assignModalSub').textContent = splitType === 'split'
+      ? 'Choose one or more people. Your share is included automatically.'
+      : 'Choose one or more people who owe the full item amount.'
+
+    const list = document.getElementById('assignModalList')
+    if (availablePeople.length === 0) {
+      list.innerHTML = '<div class="assign-empty">Add a person under Participants first, then click Split or Theirs again.</div>'
+      document.getElementById('assignApplyBtn').disabled = true
+    } else {
+      list.innerHTML = availablePeople.map(person => {
+        const checked = row.assignees.includes(person.id) ? 'checked' : ''
+        return `<label class="assign-option">
+          <input type="checkbox" value="${person.id}" ${checked}>
+          <span class="pill-dot" style="background:${person.color};"></span>
+          <span class="assign-name">${escHtml(person.name)}</span>
+          <span class="assign-phone">${escHtml(person.phone || '')}</span>
+        </label>`
+      }).join('')
+      document.getElementById('assignApplyBtn').disabled = false
+    }
+
+    const backdrop = document.getElementById('assignModalBackdrop')
+    backdrop.classList.add('show')
+    backdrop.setAttribute('aria-hidden', 'false')
+  }
+
+  function closeAssignModal() {
+    const backdrop = document.getElementById('assignModalBackdrop')
+    backdrop.classList.remove('show')
+    backdrop.setAttribute('aria-hidden', 'true')
+    pendingAssignment = null
+  }
+
+  document.getElementById('assignCancelBtn').addEventListener('click', closeAssignModal)
+  document.getElementById('assignModalBackdrop').addEventListener('click', event => {
+    if (event.target.id === 'assignModalBackdrop') closeAssignModal()
+  })
+  document.getElementById('assignApplyBtn').addEventListener('click', () => {
+    if (!pendingAssignment) return
+    const selected = [...document.querySelectorAll('#assignModalList input[type=checkbox]:checked')].map(input => input.value)
+    if (selected.length === 0) {
+      showToast('Choose at least one person.')
+      return
+    }
+
+    const row = rows.find(r => r.id === pendingAssignment.rowId)
+    if (!row) return
+    const appliedType = pendingAssignment.splitType
+    row.splitType = appliedType
+    row.assignees = appliedType === 'split' ? ['me', ...selected] : selected
+    closeAssignModal()
+    renderSheet()
+    showToast(appliedType === 'split' ? 'Item split assigned.' : 'Item assigned.')
   })
 
   // ─────────────────────────────────────────────
