@@ -99,13 +99,28 @@ nav { position:sticky; top:0; z-index:100; display:flex; align-items:center; jus
 .badge-paid { background:var(--adim); color:var(--accent); }
 .badge-personal { background:var(--bg4); color:var(--text3); }
 
+.txn-edit {
+  width:30px; height:30px; border-radius:8px; border:1px solid var(--border);
+  background:transparent; color:var(--text3); display:flex; align-items:center;
+  justify-content:center; text-decoration:none; flex-shrink:0; transition:all .18s;
+  font-size:13px;
+}
+.txn-edit:hover { color:var(--accent); border-color:var(--aborder); background:var(--adim); }
+.txn-main { display:flex; align-items:center; gap:14px; flex:1; min-width:0; }
+
 /* OWED LIST */
-.owed-row { display:flex; align-items:center; gap:10px; padding:10px 20px; border-bottom:1px solid var(--border); }
+.owed-row { padding:14px 18px; border-bottom:1px solid var(--border); }
 .owed-row:last-child { border-bottom:none; }
-.avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:500; flex-shrink:0; background:var(--bdim); color:var(--blue); }
-.owed-name { font-size:13px; color:var(--text); flex:1; }
-.owed-detail { font-size:11px; color:var(--text3); margin-top:1px; }
-.owed-amount { font-family:var(--ff-m); font-size:13px; color:var(--blue); font-weight:500; }
+.owed-top { display:flex; align-items:center; gap:10px; }
+.avatar { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:500; flex-shrink:0; background:var(--bdim); color:var(--blue); border:1px solid rgba(107,159,255,.16); }
+.owed-person { flex:1; min-width:0; }
+.owed-name { font-size:13px; color:var(--text); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.owed-detail { font-size:10px; color:var(--text3); margin-top:2px; font-family:var(--ff-m); }
+.owed-amount { font-family:var(--ff-m); font-size:14px; color:var(--blue); font-weight:500; }
+.owed-track { height:4px; background:var(--bg4); border-radius:20px; overflow:hidden; margin-top:10px; }
+.owed-fill { height:100%; background:var(--blue); border-radius:20px; }
+.owed-footer { display:flex; justify-content:space-between; gap:8px; margin-top:7px; font-size:10px; color:var(--text3); font-family:var(--ff-m); }
+.owed-phone { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 /* TIPS GRID */
 .tips-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:32px; animation:fadeUp .45s ease both .24s; }
@@ -127,6 +142,20 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 .loader-row { display:flex; align-items:center; justify-content:center; padding:24px; gap:10px; color:var(--text3); font-size:12px; font-family:var(--ff-m); }
 .spin { width:14px; height:14px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
 @keyframes spin { to{transform:rotate(360deg);} }
+
+
+@media (max-width: 800px) {
+  .stat-strip { grid-template-columns:repeat(2,1fr); }
+  .main-grid { grid-template-columns:1fr; }
+  .tips-grid { grid-template-columns:1fr; }
+}
+@media (max-width: 520px) {
+  nav { padding:0 16px; }
+  .shell { padding:0 16px; }
+  .nav-user { display:none; }
+  .stat-strip { grid-template-columns:1fr; }
+  .txn-row { padding:13px 14px; gap:8px; }
+}
 
 @keyframes fadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
 </style>
@@ -345,17 +374,22 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       const date = expenseDate(expense).toLocaleDateString('en-US', { month:'short', day:'numeric' })
       const amount = Number(expense.total_amount || expense.amount || 0)
 
+      const editUrl = 'expenses.html?edit=' + encodeURIComponent(expense.id)
+
       html += `
         <div class="txn-row">
-          <div class="txn-icon">${icons[expense.category] || '💳'}</div>
-          <div class="txn-info">
-            <div class="txn-name">${escHtml(expense.merchant || expense.description || 'Unnamed expense')}</div>
-            <div class="txn-meta">${date}${expense.payment_method ? ' · ' + escHtml(expense.payment_method) : ''}</div>
+          <div class="txn-main">
+            <div class="txn-icon">${icons[expense.category] || '💳'}</div>
+            <div class="txn-info">
+              <div class="txn-name">${escHtml(expense.merchant || expense.description || 'Unnamed expense')}</div>
+              <div class="txn-meta">${date}${expense.payment_method ? ' · ' + escHtml(expense.payment_method) : ''}</div>
+            </div>
+            <div class="txn-right">
+              <div class="txn-amount">$${amount.toFixed(2)}</div>
+              ${badge}
+            </div>
           </div>
-          <div class="txn-right">
-            <div class="txn-amount">$${amount.toFixed(2)}</div>
-            ${badge}
-          </div>
+          <a class="txn-edit" href="${editUrl}" title="Edit expense" aria-label="Edit expense">✎</a>
         </div>`
     })
     container.innerHTML = html + '</div>'
@@ -369,24 +403,54 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       container.innerHTML = `
         <div class="empty-state" style="padding:28px 20px;">
           <div style="font-size:24px;">📬</div>
-          <div class="empty-sub">No pending requests. They'll show here once you split an expense.</div>
+          <div class="empty-sub">No pending balances. People will appear here after you assign or split an expense.</div>
         </div>`
       return
     }
 
     const byPerson = {}
+
     unpaid.forEach(split => {
       const name = split.owed_by_name || split.name || 'Unnamed person'
-      byPerson[name] = (byPerson[name] || 0) + Number(split.amount_owed || split.amount || 0)
+      const amount = Number(split.amount_owed || split.amount || 0)
+      const phone = split.owed_by_phone || split.phone || ''
+      const expenseId = split.expense_id || ''
+
+      if (!byPerson[name]) {
+        byPerson[name] = { amount:0, phone, expenseIds:new Set(), splitCount:0 }
+      }
+
+      byPerson[name].amount += amount
+      byPerson[name].splitCount += 1
+      if (expenseId) byPerson[name].expenseIds.add(expenseId)
+      if (!byPerson[name].phone && phone) byPerson[name].phone = phone
     })
 
-    container.innerHTML = Object.entries(byPerson).map(([name, amount]) => {
-      const initials = name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
+    const people = Object.entries(byPerson).sort((a,b) => b[1].amount - a[1].amount)
+    const largestAmount = Math.max(...people.map(([,info]) => info.amount), 1)
+    const totalOutstanding = people.reduce((sum,[,info]) => sum + info.amount, 0)
+
+    container.innerHTML = people.map(([name, info]) => {
+      const initials = name.split(' ').filter(Boolean).map(word => word[0]).join('').toUpperCase().slice(0,2)
+      const expenseCount = info.expenseIds.size || info.splitCount
+      const width = Math.max(5, Math.round((info.amount / largestAmount) * 100))
+      const phoneText = info.phone ? escHtml(info.phone) : 'No phone saved'
+
       return `
         <div class="owed-row">
-          <div class="avatar">${escHtml(initials)}</div>
-          <div style="flex:1;"><div class="owed-name">${escHtml(name)}</div></div>
-          <div class="owed-amount">$${amount.toFixed(2)}</div>
+          <div class="owed-top">
+            <div class="avatar">${escHtml(initials || '?')}</div>
+            <div class="owed-person">
+              <div class="owed-name">${escHtml(name)}</div>
+              <div class="owed-detail">${expenseCount} unpaid expense${expenseCount === 1 ? '' : 's'}</div>
+            </div>
+            <div class="owed-amount">$${info.amount.toFixed(2)}</div>
+          </div>
+          <div class="owed-track"><div class="owed-fill" style="width:${width}%"></div></div>
+          <div class="owed-footer">
+            <span class="owed-phone">${phoneText}</span>
+            <span>${Math.round((info.amount / totalOutstanding) * 100)}% of outstanding</span>
+          </div>
         </div>`
     }).join('')
   }
