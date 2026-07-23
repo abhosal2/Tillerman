@@ -493,6 +493,128 @@ table.sheet tbody td:first-child { padding-left:20px; }
     document.getElementById('savingOverlay').classList.remove('show')
   }
 
+
+  // ─────────────────────────────────────────────
+  //  SHARED PEOPLE DIRECTORY
+  // ─────────────────────────────────────────────
+  function normalizeName(value = '') {
+    return String(value).trim().toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, ' ')
+  }
+
+  function normalizePhone(value = '') {
+    const digits = String(value).replace(/\D/g, '')
+    return digits.length > 10 ? digits.slice(-10) : digits
+  }
+
+  function normalizeEmail(value = '') {
+    return String(value).trim().toLowerCase()
+  }
+
+  function getSavedPeople() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PEOPLE_STORAGE_KEY) || '[]')
+      return Array.isArray(saved) ? saved : []
+    } catch (error) {
+      console.error('Could not read saved people:', error)
+      return []
+    }
+  }
+
+  function savePeopleDirectory(people) {
+    const unique = []
+    const seen = new Set()
+
+    people.forEach(person => {
+      if (!person || person.id === 'me') return
+      const key = String(person.id)
+      if (seen.has(key)) return
+      seen.add(key)
+      unique.push({
+        id: person.id,
+        name: person.name || 'Unnamed person',
+        phone: person.phone || '',
+        email: person.email || ''
+      })
+    })
+
+    localStorage.setItem(PEOPLE_STORAGE_KEY, JSON.stringify(unique))
+  }
+
+  function nameSimilarity(a, b) {
+    const left = normalizeName(a)
+    const right = normalizeName(b)
+    if (!left || !right) return 0
+    if (left === right) return 1
+
+    const leftWords = new Set(left.split(' '))
+    const rightWords = new Set(right.split(' '))
+    const shared = [...leftWords].filter(word => rightWords.has(word)).length
+    const wordScore = shared / Math.max(leftWords.size, rightWords.size, 1)
+
+    let samePrefix = 0
+    const minLength = Math.min(left.length, right.length)
+    for (let i = 0; i < minLength; i++) {
+      if (left[i] === right[i]) samePrefix += 1
+      else break
+    }
+    const prefixScore = samePrefix / Math.max(left.length, right.length, 1)
+
+    return Math.max(wordScore, prefixScore)
+  }
+
+  function findPossiblePersonMatch(name, phone, email) {
+    const people = getSavedPeople()
+    const cleanPhone = normalizePhone(phone)
+    const cleanEmail = normalizeEmail(email)
+    const cleanName = normalizeName(name)
+
+    if (cleanPhone) {
+      const exactPhone = people.find(person => normalizePhone(person.phone) === cleanPhone)
+      if (exactPhone) return { person: exactPhone, reason: 'phone number' }
+    }
+
+    if (cleanEmail) {
+      const exactEmail = people.find(person => normalizeEmail(person.email) === cleanEmail)
+      if (exactEmail) return { person: exactEmail, reason: 'email address' }
+    }
+
+    if (cleanName) {
+      const exactName = people.find(person => normalizeName(person.name) === cleanName)
+      if (exactName) return { person: exactName, reason: 'name' }
+
+      const closeName = people
+        .map(person => ({ person, score: nameSimilarity(name, person.name) }))
+        .sort((a, b) => b.score - a.score)[0]
+
+      if (closeName && closeName.score >= 0.72) {
+        return { person: closeName.person, reason: 'similar name' }
+      }
+    }
+
+    return null
+  }
+
+  function registerPerson(person) {
+    const people = getSavedPeople()
+    const index = people.findIndex(item => String(item.id) === String(person.id))
+    if (index >= 0) people[index] = { ...people[index], ...person }
+    else people.push(person)
+    savePeopleDirectory(people)
+  }
+
+  function loadDirectoryPeopleIntoPage() {
+    getSavedPeople().forEach(person => {
+      if (!PEOPLE.some(item => String(item.id) === String(person.id))) {
+        PEOPLE.push({
+          ...person,
+          color: COLORS[PEOPLE.length % COLORS.length]
+        })
+      }
+    })
+  }
+
   // ─────────────────────────────────────────────
   //  TABS
   // ─────────────────────────────────────────────
@@ -1031,27 +1153,69 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
     const phone = prompt("Enter their phone number (optional):") || ''
     const email = prompt("Enter their email address (optional):") || ''
+    const cleanEmail = normalizeEmail(email)
 
-    const cleanEmail = email.trim()
     if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       showToast('That email address does not look valid.')
       return
     }
 
-    const color = COLORS[PEOPLE.length % COLORS.length]
-    const pid = 'p' + (++nextPID)
-
-    PEOPLE.push({
-      id: pid,
+    const incoming = {
       name: name.trim(),
       phone: phone.trim(),
-      email: cleanEmail,
-      color
-    })
+      email: cleanEmail
+    }
 
-    participants.push(pid)
+    const match = findPossiblePersonMatch(incoming.name, incoming.phone, incoming.email)
+
+    if (match) {
+      const existing = match.person
+      const details = [
+        existing.phone ? `Phone: ${existing.phone}` : '',
+        existing.email ? `Email: ${existing.email}` : ''
+      ].filter(Boolean).join('\n')
+
+      const useExisting = confirm(
+        `This may be the same person as "${existing.name}" based on the ${match.reason}.` +
+        `${details ? '\n\n' + details : ''}` +
+        `\n\nUse the existing person instead of creating a duplicate?`
+      )
+
+      if (useExisting) {
+        const merged = {
+          ...existing,
+          phone: existing.phone || incoming.phone,
+          email: existing.email || incoming.email
+        }
+
+        registerPerson(merged)
+
+        let pagePerson = PEOPLE.find(person => String(person.id) === String(merged.id))
+        if (!pagePerson) {
+          pagePerson = { ...merged, color: COLORS[PEOPLE.length % COLORS.length] }
+          PEOPLE.push(pagePerson)
+        }
+
+        if (!participants.includes(pagePerson.id)) participants.push(pagePerson.id)
+        updatePeopleBar()
+        showToast(`Using existing person "${pagePerson.name}".`)
+        return
+      }
+    }
+
+    const person = {
+      id: 'person-' + (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+      name: incoming.name,
+      phone: incoming.phone,
+      email: incoming.email,
+      color: COLORS[PEOPLE.length % COLORS.length]
+    }
+
+    PEOPLE.push(person)
+    participants.push(person.id)
+    registerPerson(person)
     updatePeopleBar()
-    showToast(`"${name.trim()}" added`)
+    showToast(`"${person.name}" added`)
   })
 
   // ─────────────────────────────────────────────
@@ -1251,6 +1415,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   //  LOCAL STORAGE
   // ─────────────────────────────────────────────
   const STORAGE_KEY = 'tillerman_expenses'
+  const PEOPLE_STORAGE_KEY = 'tillerman_people'
 
   function getStoredExpenses() {
     try {
@@ -1453,6 +1618,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
   function addEditingPerson(person) {
     if (!person || !person.id || person.id === 'me') return
+    registerPerson(person)
 
     const existing = PEOPLE.find(item => item.id === person.id)
     if (!existing) {
@@ -1593,6 +1759,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   document.getElementById('cardLast4').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g,'').slice(0,4) })
   document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0]
   document.getElementById('m-date').value       = new Date().toISOString().split('T')[0]
+  loadDirectoryPeopleIntoPage()
   updatePeopleBar()
   updateSubmitBar()
   loadExistingExpenseForEdit()
