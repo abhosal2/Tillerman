@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tillerman — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#0C0C0D; --bg2:#131315; --bg3:#1A1A1E; --bg4:#222227;
+  --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.11);
+  --text:#EDEAE2; --text2:#8E8C84; --text3:#4E4C47;
+  --accent:#C8F55A; --accent2:#A8D848; --adim:rgba(200,245,90,0.08); --aborder:rgba(200,245,90,0.22);
+  --blue:#6B9FFF; --bdim:rgba(107,159,255,0.09);
+  --red:#FF6E6E; --amber:#F7CA45; --amberdim:rgba(247,202,69,0.09); --teal:#3ED9C8;
+  --ff-d:'Fraunces',Georgia,serif; --ff-b:'DM Sans',sans-serif; --ff-m:'DM Mono',monospace;
+  --r:10px; --rl:16px;
+}
+html { scroll-behavior:smooth; }
+body { background:var(--bg); color:var(--text); font-family:var(--ff-b); font-size:14px; line-height:1.5; min-height:100vh; }
+body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:0; background-image:radial-gradient(circle,rgba(255,255,255,0.022) 1px,transparent 1px); background-size:28px 28px; }
+
+/* NAV */
+nav { position:sticky; top:0; z-index:100; display:flex; align-items:center; justify-content:space-between; padding:0 28px; height:56px; background:rgba(12,12,13,0.9); backdrop-filter:blur(18px); border-bottom:1px solid var(--border); }
+.nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+.nav-mark { width:30px; height:30px; border-radius:8px; background:var(--accent); color:#0C0C0D; display:flex; align-items:center; justify-content:center; font-family:var(--ff-d); font-size:15px; font-weight:500; letter-spacing:-.5px; }
+.nav-wordmark { font-family:var(--ff-d); font-size:17px; font-weight:500; color:var(--text); letter-spacing:-.3px; }
+.nav-right { display:flex; align-items:center; gap:8px; }
+.nav-user { display:flex; align-items:center; gap:8px; padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:var(--bg3); font-size:12px; color:var(--text2); }
+.nav-avatar { width:22px; height:22px; border-radius:50%; background:var(--adim); border:1px solid var(--aborder); display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--accent); font-weight:500; }
+.nav-cta { display:flex; align-items:center; gap:6px; padding:7px 16px; border-radius:20px; background:var(--accent); color:#0C0C0D; font-size:13px; font-weight:500; text-decoration:none; border:none; cursor:pointer; transition:background .15s; font-family:var(--ff-b); }
+.nav-cta:hover { background:var(--accent2); }
+
+/* SHELL */
+.shell { max-width:1100px; margin:0 auto; padding:0 28px; position:relative; z-index:1; }
+
+/* PAGE HEADER */
+.page-header { padding:32px 0 24px; animation:fadeUp .45s ease both; }
+.greeting { font-family:var(--ff-d); font-size:26px; font-weight:300; color:var(--text); letter-spacing:-.5px; }
+.greeting em { font-style:italic; color:var(--accent); }
+.subgreet { font-size:13px; color:var(--text3); margin-top:4px; font-family:var(--ff-m); }
+
+/* SECURITY BAR */
+.security-bar { display:flex; align-items:center; gap:10px; padding:11px 16px; border-radius:var(--r); background:var(--adim); border:1px solid var(--aborder); margin-bottom:24px; font-size:12px; color:var(--text2); animation:fadeUp .45s ease both .06s; }
+.sec-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 5px var(--accent); flex-shrink:0; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+
+/* STAT STRIP */
+.stat-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:var(--rl); overflow:hidden; margin-bottom:24px; animation:fadeUp .45s ease both .1s; }
+.stat-cell { background:var(--bg2); padding:18px 22px; display:flex; flex-direction:column; gap:5px; transition:background .2s; }
+.stat-cell:hover { background:var(--bg3); }
+.stat-lbl { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; font-family:var(--ff-m); }
+.stat-val { font-family:var(--ff-d); font-size:26px; font-weight:300; letter-spacing:-1px; color:var(--text); }
+.stat-hint { font-size:11px; color:var(--text3); font-family:var(--ff-m); }
+
+/* MAIN GRID */
+.main-grid { display:grid; grid-template-columns:1fr 300px; gap:16px; margin-bottom:16px; animation:fadeUp .45s ease both .16s; }
+
+/* PANEL */
+.panel { background:var(--bg2); border:1px solid var(--border); border-radius:var(--rl); overflow:hidden; }
+.panel-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); }
+.panel-title { font-family:var(--ff-d); font-size:14px; font-weight:500; color:var(--text); letter-spacing:-.1px; }
+.panel-btn { font-size:11px; color:var(--text3); border:1px solid var(--border); border-radius:6px; padding:4px 10px; background:transparent; cursor:pointer; font-family:var(--ff-b); transition:all .2s; text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
+.panel-btn:hover { border-color:var(--border2); color:var(--text2); }
+
+/* EMPTY STATE */
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:52px 24px; text-align:center; gap:12px; }
+.empty-icon { width:58px; height:58px; border-radius:16px; background:var(--bg3); border:1px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:24px; margin-bottom:4px; }
+.empty-title { font-family:var(--ff-d); font-size:16px; font-weight:500; color:var(--text2); }
+.empty-sub { font-size:12px; color:var(--text3); line-height:1.65; max-width:220px; }
+.empty-cta { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:8px; background:var(--accent); color:#0C0C0D; font-size:12px; font-weight:500; text-decoration:none; border:none; cursor:pointer; font-family:var(--ff-b); transition:background .15s; margin-top:4px; }
+.empty-cta:hover { background:var(--accent2); }
+.empty-ghost { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; border:1px solid var(--border2); color:var(--text3); font-size:12px; text-decoration:none; font-family:var(--ff-b); transition:all .15s; background:transparent; cursor:pointer; }
+.empty-ghost:hover { color:var(--text2); border-color:var(--border2); }
+
+/* FRIEND EMPTY */
+.friend-empty { padding:24px 20px; text-align:center; }
+.friend-empty p { font-size:12px; color:var(--text3); margin-bottom:12px; line-height:1.6; }
+
+/* TXN LIST */
+.txn-list { padding:0; }
+.txn-row { display:flex; align-items:center; gap:14px; padding:14px 20px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .15s; }
+.txn-row:last-child { border-bottom:none; }
+.txn-row:hover { background:var(--bg3); }
+.txn-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; background:var(--bg4); }
+.txn-info { flex:1; min-width:0; }
+.txn-name { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.txn-meta { font-size:11px; color:var(--text3); margin-top:2px; font-family:var(--ff-m); }
+.txn-right { text-align:right; flex-shrink:0; }
+.txn-amount { font-family:var(--ff-m); font-size:13px; font-weight:500; color:var(--text); }
+.txn-badge { display:inline-block; font-size:10px; padding:2px 7px; border-radius:4px; margin-top:3px; font-family:var(--ff-m); }
+.badge-pending { background:var(--amberdim); color:var(--amber); }
+.badge-paid { background:var(--adim); color:var(--accent); }
+.badge-personal { background:var(--bg4); color:var(--text3); }
+
+.txn-edit {
+  width:30px; height:30px; border-radius:8px; border:1px solid var(--border);
+  background:transparent; color:var(--text3); display:flex; align-items:center;
+  justify-content:center; text-decoration:none; flex-shrink:0; transition:all .18s;
+  font-size:13px;
+}
+.txn-edit:hover { color:var(--accent); border-color:var(--aborder); background:var(--adim); }
+.txn-main { display:flex; align-items:center; gap:14px; flex:1; min-width:0; }
+
+/* OWED LIST */
+.owed-row { padding:14px 18px; border-bottom:1px solid var(--border); }
+.owed-row:last-child { border-bottom:none; }
+.owed-top { display:flex; align-items:center; gap:10px; }
+.avatar { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:500; flex-shrink:0; background:var(--bdim); color:var(--blue); border:1px solid rgba(107,159,255,.16); }
+.owed-person { flex:1; min-width:0; }
+.owed-name { font-size:13px; color:var(--text); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.owed-detail { font-size:10px; color:var(--text3); margin-top:2px; font-family:var(--ff-m); }
+.owed-amount { font-family:var(--ff-m); font-size:14px; color:var(--blue); font-weight:500; }
+.owed-track { height:4px; background:var(--bg4); border-radius:20px; overflow:hidden; margin-top:10px; }
+.owed-fill { height:100%; background:var(--blue); border-radius:20px; }
+.owed-footer { display:flex; justify-content:space-between; gap:8px; margin-top:7px; font-size:10px; color:var(--text3); font-family:var(--ff-m); }
+.owed-phone { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* TIPS GRID */
+.tips-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:32px; animation:fadeUp .45s ease both .24s; }
+.tip-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--rl); padding:18px 20px; display:flex; flex-direction:column; gap:9px; transition:border-color .2s,background .2s; cursor:pointer; text-decoration:none; }
+.tip-card:hover { border-color:var(--border2); background:var(--bg3); }
+.tip-icon { font-size:22px; }
+.tip-title { font-size:13px; font-weight:500; color:var(--text); }
+.tip-desc { font-size:11px; color:var(--text3); line-height:1.6; }
+.tip-arrow { font-size:11px; color:var(--text3); margin-top:auto; }
+
+/* FOOTER */
+footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; justify-content:space-between; align-items:center; position:relative; z-index:1; }
+.foot-l { font-size:11px; color:var(--text3); font-family:var(--ff-m); }
+.foot-r { display:flex; gap:16px; }
+.foot-link { font-size:11px; color:var(--text3); text-decoration:none; transition:color .2s; }
+.foot-link:hover { color:var(--text2); }
+
+/* LOADER */
+.loader-row { display:flex; align-items:center; justify-content:center; padding:24px; gap:10px; color:var(--text3); font-size:12px; font-family:var(--ff-m); }
+.spin { width:14px; height:14px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg);} }
+
+
+@media (max-width: 800px) {
+  .stat-strip { grid-template-columns:repeat(2,1fr); }
+  .main-grid { grid-template-columns:1fr; }
+  .tips-grid { grid-template-columns:1fr; }
+}
+@media (max-width: 520px) {
+  nav { padding:0 16px; }
+  .shell { padding:0 16px; }
+  .nav-user { display:none; }
+  .stat-strip { grid-template-columns:1fr; }
+  .txn-row { padding:13px 14px; gap:8px; }
+}
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html">
+    <div class="nav-mark">T</div>
+    <span class="nav-wordmark">Tillerman</span>
+  </a>
+  <div class="nav-right">
+    <div class="nav-user">
+      <div class="nav-avatar">YO</div>
+      <span>Local device</span>
+    </div>
+    <a class="nav-cta" href="expenses.html">+ Add expense</a>
+  </div>
+</nav>
+
+<div class="shell">
+  <div class="page-header">
+    <div class="greeting">Good <span id="todWord">day</span>, <em>here's your spending.</em></div>
+    <div class="subgreet" id="subgreet">Loading… · <span id="monthLabel"></span></div>
+  </div>
+
+  <div class="security-bar">
+    <div class="sec-dot"></div>
+    <span>Local prototype — data is stored only in this browser for now.</span>
+  </div>
+
+  <div class="stat-strip">
+    <div class="stat-cell"><div class="stat-lbl">Total spent</div><div class="stat-val" id="statTotal">$0</div><div class="stat-hint" id="statTotalHint">This month</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Owed to you</div><div class="stat-val" id="statOwed">$0</div><div class="stat-hint" id="statOwedHint">No splits yet</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Your net cost</div><div class="stat-val" id="statNet">$0</div><div class="stat-hint">After all splits</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Receipts logged</div><div class="stat-val" id="statCount">0</div><div class="stat-hint">All time</div></div>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Transactions</div>
+        <a href="expenses.html" class="panel-btn">+ New expense</a>
+      </div>
+      <div id="txnContainer">
+        <div class="loader-row"><div class="spin"></div> Loading transactions…</div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px;">
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Who owes you</div></div>
+        <div id="owedContainer">
+          <div class="loader-row"><div class="spin"></div> Loading…</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">This month by category</div></div>
+        <div id="categoryContainer" style="padding:16px 20px;">
+          <div class="loader-row"><div class="spin"></div> Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tips-grid">
+    <a href="expenses.html" class="tip-card">
+      <div class="tip-icon">📸</div>
+      <div class="tip-title">Snap a receipt</div>
+      <div class="tip-desc">Upload a photo or PDF and every line item gets extracted automatically.</div>
+      <div class="tip-arrow">Get started →</div>
+    </a>
+    <a href="expenses.html" class="tip-card">
+      <div class="tip-icon">✏️</div>
+      <div class="tip-title">Type it in</div>
+      <div class="tip-desc">No receipt? Enter a transaction, amount, category and assign it to people.</div>
+      <div class="tip-arrow">Add manually →</div>
+    </a>
+    <a href="#" class="tip-card" id="refreshTip">
+      <div class="tip-icon">🔄</div>
+      <div class="tip-title">Refresh data</div>
+      <div class="tip-desc">Reload the dashboard with the latest expenses saved in this browser.</div>
+      <div class="tip-arrow">Refresh →</div>
+    </a>
+  </div>
+</div>
+
+<footer>
+  <div class="foot-l">Tillerman · Toledo, OH · <span id="footMonth"></span></div>
+  <div class="foot-r">
+    <a class="foot-link" href="#">Settings</a>
+    <a class="foot-link" href="#">Export</a>
+  </div>
+</footer>
+
+<!-- ── PAGE LOGIC ── -->
+<script>
+  // Expenses are read from localStorage so the interface remains functional
+  // while the backend is rebuilt from scratch.
+
+  const STORAGE_KEY = 'tillerman_expenses'
+
+  // ─────────────────────────────────────────────
+  //  TIME OF DAY GREETING
+  // ─────────────────────────────────────────────
+  const now = new Date()
+  const hour = now.getHours()
+  const monthName = now.toLocaleDateString('en-US', { month:'long', year:'numeric' })
+
+  document.getElementById('todWord').textContent =
+    hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+  document.getElementById('monthLabel').textContent = monthName
+  document.getElementById('footMonth').textContent = monthName
+
+  // ─────────────────────────────────────────────
+  //  LOCAL DATA HELPERS
+  // ─────────────────────────────────────────────
+  function getExpenses() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+      return Array.isArray(saved) ? saved : []
+    } catch (error) {
+      console.error('Could not read local expenses:', error)
+      return []
+    }
+  }
+
+  function getAllSplits(expenses) {
+    return expenses.flatMap(expense =>
+      Array.isArray(expense.splits)
+        ? expense.splits.map(split => ({ ...split, expense_id: expense.id }))
+        : []
+    )
+  }
+
+  // ─────────────────────────────────────────────
+  //  LOAD DASHBOARD DATA
+  // ─────────────────────────────────────────────
+  function loadDashboard() {
+    const expenses = getExpenses().sort((a, b) => {
+      const aDate = new Date(a.created_at || a.expense_date || 0)
+      const bDate = new Date(b.created_at || b.expense_date || 0)
+      return bDate - aDate
+    })
+    const splits = getAllSplits(expenses)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    renderStats(expenses, splits, startOfMonth)
+    renderTransactions(expenses, splits)
+    renderOwed(splits)
+    renderCategories(expenses, startOfMonth)
+
+    document.getElementById('subgreet').textContent =
+      (expenses.length ? `${expenses.length} expenses saved locally` : 'No expenses logged yet') +
+      ' · ' + monthName
+  }
+
+  function expenseDate(expense) {
+    return new Date(expense.expense_date || expense.created_at || 0)
+  }
+
+  function renderStats(expenses, splits, startOfMonth) {
+    const thisMonth = expenses.filter(expense => expenseDate(expense) >= startOfMonth)
+    const totalThisMonth = thisMonth.reduce((sum, expense) =>
+      sum + Number(expense.total_amount || expense.amount || 0), 0)
+
+    const unpaidSplits = splits.filter(split => !split.is_paid)
+    const owedTotal = unpaidSplits.reduce((sum, split) =>
+      sum + Number(split.amount_owed || split.amount || 0), 0)
+
+    const allTotal = expenses.reduce((sum, expense) =>
+      sum + Number(expense.total_amount || expense.amount || 0), 0)
+    const allOwed = splits.reduce((sum, split) =>
+      sum + Number(split.amount_owed || split.amount || 0), 0)
+
+    document.getElementById('statTotal').textContent = '$' + totalThisMonth.toFixed(2)
+    document.getElementById('statTotalHint').textContent =
+      `${thisMonth.length} expense${thisMonth.length === 1 ? '' : 's'} this month`
+    document.getElementById('statOwed').textContent = '$' + owedTotal.toFixed(2)
+    document.getElementById('statOwedHint').textContent =
+      unpaidSplits.length ? `${unpaidSplits.length} pending` : 'No splits yet'
+    document.getElementById('statNet').textContent = '$' + (allTotal - allOwed).toFixed(2)
+    document.getElementById('statCount').textContent = expenses.length
+  }
+
+  function renderTransactions(expenses, splits) {
+    const container = document.getElementById('txnContainer')
+
+    if (expenses.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🧾</div>
+          <div class="empty-title">No transactions yet</div>
+          <div class="empty-sub">Add your first expense manually or upload a receipt to get started.</div>
+          <a href="expenses.html" class="empty-cta">Add first expense →</a>
+        </div>`
+      return
+    }
+
+    const icons = {
+      Groceries:'🛒', Dining:'🍽️', Transport:'⛽', Entertainment:'🎬',
+      Health:'💊', Household:'🏠', Other:'📦'
+    }
+
+    let html = '<div class="txn-list">'
+    expenses.slice(0, 8).forEach(expense => {
+      const itemSplits = splits.filter(split => split.expense_id === expense.id)
+      const hasUnpaid = itemSplits.some(split => !split.is_paid)
+      const badge = hasUnpaid
+        ? '<span class="txn-badge badge-pending">split pending</span>'
+        : itemSplits.length
+          ? '<span class="txn-badge badge-paid">✓ all paid</span>'
+          : '<span class="txn-badge badge-personal">personal</span>'
+
+      const date = expenseDate(expense).toLocaleDateString('en-US', { month:'short', day:'numeric' })
+      const amount = Number(expense.total_amount || expense.amount || 0)
+
+      const detailsUrl = 'transaction.html?id=' + encodeURIComponent(expense.id)
+
+      html += `
+        <div class="txn-row">
+          <div class="txn-main">
+            <div class="txn-icon">${icons[expense.category] || '💳'}</div>
+            <div class="txn-info">
+              <div class="txn-name">${escHtml(expense.merchant || expense.description || 'Unnamed expense')}</div>
+              <div class="txn-meta">${date}${expense.payment_method ? ' · ' + escHtml(expense.payment_method) : ''}</div>
+            </div>
+            <div class="txn-right">
+              <div class="txn-amount">$${amount.toFixed(2)}</div>
+              ${badge}
+            </div>
+          </div>
+          <a class="txn-edit" href="${detailsUrl}" title="View transaction details" aria-label="View transaction details">›</a>
+        </div>`
+    })
+    container.innerHTML = html + '</div>'
+  }
+
+
+  function normalizePersonName(value = '') {
+    return String(value).trim().toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, ' ')
+  }
+
+  function normalizePersonPhone(value = '') {
+    const digits = String(value).replace(/\D/g, '')
+    return digits.length > 10 ? digits.slice(-10) : digits
+  }
+
+  function normalizePersonEmail(value = '') {
+    return String(value).trim().toLowerCase()
+  }
+
+  function personGroupingKey(split) {
+    if (split.person_id) return 'id:' + String(split.person_id)
+
+    const email = normalizePersonEmail(split.owed_by_email || split.email || '')
+    if (email) return 'email:' + email
+
+    const phone = normalizePersonPhone(split.owed_by_phone || split.phone || '')
+    if (phone) return 'phone:' + phone
+
+    return 'name:' + normalizePersonName(
+      split.owed_by_name || split.name || 'Unnamed person'
+    )
+  }
+
+  function renderOwed(splits) {
+    const container = document.getElementById('owedContainer')
+    const unpaid = splits.filter(split => !split.is_paid)
+
+    if (unpaid.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding:28px 20px;">
+          <div style="font-size:24px;">📬</div>
+          <div class="empty-sub">No pending balances. People will appear here after you assign or split an expense.</div>
+        </div>`
+      return
+    }
+
+    const byPerson = {}
+
+    unpaid.forEach(split => {
+      const key = personGroupingKey(split)
+      const name = split.owed_by_name || split.name || 'Unnamed person'
+      const amount = Number(split.amount_owed || split.amount || 0)
+      const phone = split.owed_by_phone || split.phone || ''
+      const email = split.owed_by_email || split.email || ''
+      const expenseId = split.expense_id || ''
+
+      if (!byPerson[key]) {
+        byPerson[key] = {
+          name,
+          amount: 0,
+          phone,
+          email,
+          expenseIds: new Set(),
+          splitCount: 0
+        }
+      }
+
+      byPerson[key].amount += amount
+      byPerson[key].splitCount += 1
+      if (expenseId) byPerson[key].expenseIds.add(expenseId)
+      if (!byPerson[key].phone && phone) byPerson[key].phone = phone
+      if (!byPerson[key].email && email) byPerson[key].email = email
+    })
+
+    const people = Object.values(byPerson).sort((a,b) => b.amount - a.amount)
+    const largestAmount = Math.max(...people.map(info => info.amount), 1)
+    const totalOutstanding = people.reduce((sum, info) => sum + info.amount, 0)
+
+    container.innerHTML = people.map(info => {
+      const initials = info.name.split(' ').filter(Boolean).map(word => word[0]).join('').toUpperCase().slice(0,2)
+      const expenseCount = info.expenseIds.size || info.splitCount
+      const width = Math.max(5, Math.round((info.amount / largestAmount) * 100))
+      const contactText = info.phone || info.email || 'No contact saved'
+
+      return `
+        <div class="owed-row">
+          <div class="owed-top">
+            <div class="avatar">${escHtml(initials || '?')}</div>
+            <div class="owed-person">
+              <div class="owed-name">${escHtml(info.name)}</div>
+              <div class="owed-detail">${expenseCount} unpaid expense${expenseCount === 1 ? '' : 's'}</div>
+            </div>
+            <div class="owed-amount">$${info.amount.toFixed(2)}</div>
+          </div>
+          <div class="owed-track"><div class="owed-fill" style="width:${width}%"></div></div>
+          <div class="owed-footer">
+            <span class="owed-phone">${escHtml(contactText)}</span>
+            <span>${Math.round((info.amount / totalOutstanding) * 100)}% of outstanding</span>
+          </div>
+        </div>`
+    }).join('')
+  }
+
+  function renderCategories(expenses, startOfMonth) {
+    const container = document.getElementById('categoryContainer')
+    const thisMonth = expenses.filter(expense => expenseDate(expense) >= startOfMonth)
+
+    if (thisMonth.length === 0) {
+      container.innerHTML = '<div class="empty-sub" style="text-align:center;">No spending this month yet.</div>'
+      return
+    }
+
+    const byCategory = {}
+    thisMonth.forEach(expense => {
+      const category = expense.category || 'Other'
+      byCategory[category] = (byCategory[category] || 0) + Number(expense.total_amount || expense.amount || 0)
+    })
+
+    const max = Math.max(...Object.values(byCategory))
+    container.innerHTML = Object.entries(byCategory)
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, amount]) => {
+        const width = Math.round((amount / max) * 100)
+        return `
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <div style="font-size:12px; color:var(--text2); width:90px; flex-shrink:0;">${escHtml(category)}</div>
+            <div style="flex:1; height:4px; background:var(--bg4); border-radius:2px; overflow:hidden;">
+              <div style="height:100%; width:${width}%; background:var(--accent); border-radius:2px;"></div>
+            </div>
+            <div style="font-size:12px; font-family:var(--ff-m); color:var(--text2); width:54px; text-align:right;">$${amount.toFixed(0)}</div>
+          </div>`
+      }).join('')
+  }
+
+  function escHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+
+  document.getElementById('refreshTip').addEventListener('click', event => {
+    event.preventDefault()
+    document.getElementById('txnContainer').innerHTML =
+      '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
+    document.getElementById('owedContainer').innerHTML =
+      '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
+    window.setTimeout(loadDashboard, 150)
+  })
+
+  loadDashboard()
+</script>
+
+</body>
+</html>
