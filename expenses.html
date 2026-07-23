@@ -959,19 +959,45 @@ table.sheet tbody td:first-child { padding-left:20px; }
   //  TOTALS
   // ─────────────────────────────────────────────
   function updateTotals() {
-    let receipt=0, mine=0, owed=0, unassigned=0
-    rows.forEach(r => {
-      const total = r.qty * r.unitPrice
+    let receipt = 0
+    let mine = 0
+    let owed = 0
+    let unassigned = 0
+
+    rows.forEach(row => {
+      const total = row.qty * row.unitPrice
       receipt += total
-      if      (r.splitType==='mine')   mine += total
-      else if (r.splitType==='theirs') owed += total
-      else if (r.splitType==='split')  { mine += total/2; owed += total/2 }
-      if (r.assignees.length===0 && r.splitType!=='mine') unassigned += total
+
+      if (row.splitType === 'mine') {
+        mine += total
+        return
+      }
+
+      if (!Array.isArray(row.assignees) || row.assignees.length === 0) {
+        unassigned += total
+        return
+      }
+
+      if (row.splitType === 'theirs') {
+        owed += total
+        return
+      }
+
+      if (row.splitType === 'split') {
+        const participantCount = row.assignees.length
+        const sharePerPerson = total / participantCount
+        const includesMe = row.assignees.includes('me')
+        const otherCount = row.assignees.filter(pid => pid !== 'me').length
+
+        if (includesMe) mine += sharePerPerson
+        owed += sharePerPerson * otherCount
+      }
     })
+
     document.getElementById('totReceiptTotal').textContent = '$' + receipt.toFixed(2)
-    document.getElementById('totMyShare').textContent      = '$' + mine.toFixed(2)
-    document.getElementById('totOwed').textContent         = '$' + owed.toFixed(2)
-    document.getElementById('totUnassigned').textContent   = '$' + unassigned.toFixed(2)
+    document.getElementById('totMyShare').textContent = '$' + mine.toFixed(2)
+    document.getElementById('totOwed').textContent = '$' + owed.toFixed(2)
+    document.getElementById('totUnassigned').textContent = '$' + unassigned.toFixed(2)
   }
 
   // ─────────────────────────────────────────────
@@ -1019,9 +1045,9 @@ table.sheet tbody td:first-child { padding-left:20px; }
   function openAssignmentEditor(rowId) {
     const row = rows.find(r => r.id === rowId)
     if (!row) return
+
     if (row.splitType === 'mine') {
-      const choice = window.confirm('This item is currently yours. Click OK to split it, or Cancel to assign it entirely to someone else.')
-      openAssignModal(rowId, choice ? 'split' : 'theirs')
+      openAssignModal(rowId, 'split')
     } else {
       openAssignModal(rowId, row.splitType)
     }
@@ -1031,26 +1057,34 @@ table.sheet tbody td:first-child { padding-left:20px; }
     const row = rows.find(r => r.id === rowId)
     if (!row) return
 
-    const availablePeople = PEOPLE.filter(person => person.id !== 'me' && participants.includes(person.id))
+    const availablePeople = splitType === 'split'
+      ? PEOPLE.filter(person => person.id === 'me' || participants.includes(person.id))
+      : PEOPLE.filter(person => person.id !== 'me' && participants.includes(person.id))
+
     pendingAssignment = { rowId, splitType }
 
-    document.getElementById('assignModalTitle').textContent = splitType === 'split' ? 'Split this item' : 'Assign this item'
-    document.getElementById('assignModalSub').textContent = splitType === 'split'
-      ? 'Choose one or more people. Your share is included automatically.'
-      : 'Choose one or more people who owe the full item amount.'
+    document.getElementById('assignModalTitle').textContent =
+      splitType === 'split' ? 'Choose who splits this item' : 'Assign this item'
+
+    document.getElementById('assignModalSub').textContent =
+      splitType === 'split'
+        ? 'Select every person who should share the item, including you only when you are part of the split.'
+        : 'Choose one or more people who should pay for the full item.'
 
     const list = document.getElementById('assignModalList')
-    if (availablePeople.length === 0) {
-      list.innerHTML = '<div class="assign-empty">Add a person under Participants first, then click Split or Theirs again.</div>'
+
+    if (availablePeople.length === 0 || (splitType === 'split' && availablePeople.length < 2)) {
+      list.innerHTML = '<div class="assign-empty">Add at least one other person under Participants first.</div>'
       document.getElementById('assignApplyBtn').disabled = true
     } else {
       list.innerHTML = availablePeople.map(person => {
         const checked = row.assignees.includes(person.id) ? 'checked' : ''
+        const phoneText = person.id === 'me' ? 'Your share' : (person.phone || '')
         return `<label class="assign-option">
           <input type="checkbox" value="${person.id}" ${checked}>
           <span class="pill-dot" style="background:${person.color};"></span>
           <span class="assign-name">${escHtml(person.name)}</span>
-          <span class="assign-phone">${escHtml(person.phone || '')}</span>
+          <span class="assign-phone">${escHtml(phoneText)}</span>
         </label>`
       }).join('')
       document.getElementById('assignApplyBtn').disabled = false
@@ -1074,20 +1108,37 @@ table.sheet tbody td:first-child { padding-left:20px; }
   })
   document.getElementById('assignApplyBtn').addEventListener('click', () => {
     if (!pendingAssignment) return
-    const selected = [...document.querySelectorAll('#assignModalList input[type=checkbox]:checked')].map(input => input.value)
-    if (selected.length === 0) {
+
+    const selected = [
+      ...document.querySelectorAll('#assignModalList input[type=checkbox]:checked')
+    ].map(input => input.value)
+
+    const appliedType = pendingAssignment.splitType
+
+    if (appliedType === 'split' && selected.length < 2) {
+      showToast('Choose at least two people for a split.')
+      return
+    }
+
+    if (appliedType === 'theirs' && selected.length === 0) {
       showToast('Choose at least one person.')
       return
     }
 
     const row = rows.find(r => r.id === pendingAssignment.rowId)
     if (!row) return
-    const appliedType = pendingAssignment.splitType
+
     row.splitType = appliedType
-    row.assignees = appliedType === 'split' ? ['me', ...selected] : selected
+    row.assignees = [...selected]
+
     closeAssignModal()
     renderSheet()
-    showToast(appliedType === 'split' ? 'Item split assigned.' : 'Item assigned.')
+
+    showToast(
+      appliedType === 'split'
+        ? `Item split between ${selected.length} people.`
+        : 'Item assigned.'
+    )
   })
 
   // ─────────────────────────────────────────────
@@ -1225,9 +1276,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
       if (row.splitType === 'theirs') {
         amountPerPerson = rowTotal / otherAssignees.length
       } else if (row.splitType === 'split') {
-        const totalParticipants = row.assignees.includes('me')
-          ? row.assignees.length
-          : otherAssignees.length + 1
+        const totalParticipants = row.assignees.length
         amountPerPerson = rowTotal / Math.max(totalParticipants, 1)
       }
 
