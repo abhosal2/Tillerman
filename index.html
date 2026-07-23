@@ -395,6 +395,36 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     container.innerHTML = html + '</div>'
   }
 
+
+  function normalizePersonName(value = '') {
+    return String(value).trim().toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, ' ')
+  }
+
+  function normalizePersonPhone(value = '') {
+    const digits = String(value).replace(/\D/g, '')
+    return digits.length > 10 ? digits.slice(-10) : digits
+  }
+
+  function normalizePersonEmail(value = '') {
+    return String(value).trim().toLowerCase()
+  }
+
+  function personGroupingKey(split) {
+    if (split.person_id) return 'id:' + String(split.person_id)
+
+    const email = normalizePersonEmail(split.owed_by_email || split.email || '')
+    if (email) return 'email:' + email
+
+    const phone = normalizePersonPhone(split.owed_by_phone || split.phone || '')
+    if (phone) return 'phone:' + phone
+
+    return 'name:' + normalizePersonName(
+      split.owed_by_name || split.name || 'Unnamed person'
+    )
+  }
+
   function renderOwed(splits) {
     const container = document.getElementById('owedContainer')
     const unpaid = splits.filter(split => !split.is_paid)
@@ -411,44 +441,54 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     const byPerson = {}
 
     unpaid.forEach(split => {
+      const key = personGroupingKey(split)
       const name = split.owed_by_name || split.name || 'Unnamed person'
       const amount = Number(split.amount_owed || split.amount || 0)
       const phone = split.owed_by_phone || split.phone || ''
+      const email = split.owed_by_email || split.email || ''
       const expenseId = split.expense_id || ''
 
-      if (!byPerson[name]) {
-        byPerson[name] = { amount:0, phone, expenseIds:new Set(), splitCount:0 }
+      if (!byPerson[key]) {
+        byPerson[key] = {
+          name,
+          amount: 0,
+          phone,
+          email,
+          expenseIds: new Set(),
+          splitCount: 0
+        }
       }
 
-      byPerson[name].amount += amount
-      byPerson[name].splitCount += 1
-      if (expenseId) byPerson[name].expenseIds.add(expenseId)
-      if (!byPerson[name].phone && phone) byPerson[name].phone = phone
+      byPerson[key].amount += amount
+      byPerson[key].splitCount += 1
+      if (expenseId) byPerson[key].expenseIds.add(expenseId)
+      if (!byPerson[key].phone && phone) byPerson[key].phone = phone
+      if (!byPerson[key].email && email) byPerson[key].email = email
     })
 
-    const people = Object.entries(byPerson).sort((a,b) => b[1].amount - a[1].amount)
-    const largestAmount = Math.max(...people.map(([,info]) => info.amount), 1)
-    const totalOutstanding = people.reduce((sum,[,info]) => sum + info.amount, 0)
+    const people = Object.values(byPerson).sort((a,b) => b.amount - a.amount)
+    const largestAmount = Math.max(...people.map(info => info.amount), 1)
+    const totalOutstanding = people.reduce((sum, info) => sum + info.amount, 0)
 
-    container.innerHTML = people.map(([name, info]) => {
-      const initials = name.split(' ').filter(Boolean).map(word => word[0]).join('').toUpperCase().slice(0,2)
+    container.innerHTML = people.map(info => {
+      const initials = info.name.split(' ').filter(Boolean).map(word => word[0]).join('').toUpperCase().slice(0,2)
       const expenseCount = info.expenseIds.size || info.splitCount
       const width = Math.max(5, Math.round((info.amount / largestAmount) * 100))
-      const phoneText = info.phone ? escHtml(info.phone) : 'No phone saved'
+      const contactText = info.phone || info.email || 'No contact saved'
 
       return `
         <div class="owed-row">
           <div class="owed-top">
             <div class="avatar">${escHtml(initials || '?')}</div>
             <div class="owed-person">
-              <div class="owed-name">${escHtml(name)}</div>
+              <div class="owed-name">${escHtml(info.name)}</div>
               <div class="owed-detail">${expenseCount} unpaid expense${expenseCount === 1 ? '' : 's'}</div>
             </div>
             <div class="owed-amount">$${info.amount.toFixed(2)}</div>
           </div>
           <div class="owed-track"><div class="owed-fill" style="width:${width}%"></div></div>
           <div class="owed-footer">
-            <span class="owed-phone">${phoneText}</span>
+            <span class="owed-phone">${escHtml(contactText)}</span>
             <span>${Math.round((info.amount / totalOutstanding) * 100)}% of outstanding</span>
           </div>
         </div>`
