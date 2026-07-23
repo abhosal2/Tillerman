@@ -110,15 +110,34 @@ function getId(){
   return new URLSearchParams(window.location.search).get('id')
 }
 
-function getAssignmentLabel(item){
-  const names = Array.isArray(item.assignees) ? item.assignees : []
+function getInitial(name=''){
+  const cleaned = String(name).trim()
+  return cleaned ? cleaned.charAt(0).toUpperCase() : '?'
+}
+
+function getAssignmentLabel(item, personMap){
+  const assignees = Array.isArray(item.assignees) ? item.assignees : []
+  const details = Array.isArray(item.assigneeDetails) ? item.assigneeDetails : []
   const splitType = item.splitType || item.split_type || 'mine'
+
   if(splitType === 'mine') return 'You'
-  if(names.length === 0) return splitType === 'theirs' ? 'Other person' : 'Split'
-  return names.map(name => {
-    if(typeof name === 'string') return name === 'me' ? 'You' : name
-    return name?.name || 'Person'
-  }).join(', ')
+
+  const labels = assignees.map(id => {
+    if(id === 'me') return 'You'
+
+    const detail = details.find(person => String(person.id) === String(id))
+    const name = detail?.name || personMap[id] || ''
+
+    return name ? getInitial(name) : '?'
+  })
+
+  const unique = [...new Set(labels.filter(Boolean))]
+
+  if(unique.length === 0){
+    return splitType === 'theirs' ? 'Other person' : 'Split'
+  }
+
+  return unique.join(', ')
 }
 
 function render(){
@@ -150,6 +169,20 @@ function render(){
     byPerson[name].count += 1
   })
 
+  const personMap = {}
+
+  splits.forEach(split => {
+    const id = split.person_id
+    const name = split.owed_by_name || split.name || ''
+    if(id && name) personMap[id] = name
+  })
+
+  items.forEach(item => {
+    ;(item.assigneeDetails || []).forEach(person => {
+      if(person?.id && person?.name) personMap[person.id] = person.name
+    })
+  })
+
   const people = Object.entries(byPerson).sort((a,b) => b[1].amount - a[1].amount)
   const maxPerson = Math.max(...people.map(([,info]) => info.amount), 1)
   const date = new Date(expense.expense_date || expense.created_at || Date.now())
@@ -171,7 +204,7 @@ function render(){
           <div class="item-meta">Qty ${qty} · ${money(unit)} each</div>
         </div>
         <div class="item-price">${money(total)}</div>
-        <div class="assignment">${esc(getAssignmentLabel(item))}</div>
+        <div class="assignment">${esc(getAssignmentLabel(item, personMap))}</div>
       </div>`
   }).join('') : `<div class="empty">This expense does not contain item-level details.</div>`
 
