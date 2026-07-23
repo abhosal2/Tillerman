@@ -451,7 +451,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   // ─────────────────────────────────────────────
   const COLORS = ['#6B9FFF','#3ED9C8','#F7CA45','#FF6E6E','#C084FC','#FB923C']
   let PEOPLE = [
-    { id:'me', name:'Me (you)', phone:'', color:'#C8F55A' }
+    { id:'me', name:'Me (you)', phone:'', email:'', color:'#C8F55A' }
   ]
   let participants = ['me']
   let nextPID = 10
@@ -1026,15 +1026,32 @@ table.sheet tbody td:first-child { padding-left:20px; }
   }
 
   document.getElementById('addPersonBtn').addEventListener('click', () => {
-    const name = prompt('Enter person\'s name:')
+    const name = prompt("Enter the person's name:")
     if (!name || !name.trim()) return
-    const phone = prompt('Enter phone number (optional):') || ''
+
+    const phone = prompt("Enter their phone number (optional):") || ''
+    const email = prompt("Enter their email address (optional):") || ''
+
+    const cleanEmail = email.trim()
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      showToast('That email address does not look valid.')
+      return
+    }
+
     const color = COLORS[PEOPLE.length % COLORS.length]
-    const pid   = 'p' + (++nextPID)
-    PEOPLE.push({ id:pid, name:name.trim(), phone:phone.trim(), color })
+    const pid = 'p' + (++nextPID)
+
+    PEOPLE.push({
+      id: pid,
+      name: name.trim(),
+      phone: phone.trim(),
+      email: cleanEmail,
+      color
+    })
+
     participants.push(pid)
     updatePeopleBar()
-    showToast('"' + name.trim() + '" added as a participant')
+    showToast(`"${name.trim()}" added`)
   })
 
   // ─────────────────────────────────────────────
@@ -1079,7 +1096,10 @@ table.sheet tbody td:first-child { padding-left:20px; }
     } else {
       list.innerHTML = availablePeople.map(person => {
         const checked = row.assignees.includes(person.id) ? 'checked' : ''
-        const phoneText = person.id === 'me' ? 'Your share' : (person.phone || '')
+        const contactParts = []
+        if (person.phone) contactParts.push(person.phone)
+        if (person.email) contactParts.push(person.email)
+        const phoneText = person.id === 'me' ? 'Your share' : contactParts.join(' · ')
         return `<label class="assign-option">
           <input type="checkbox" value="${person.id}" ${checked}>
           <span class="pill-dot" style="background:${person.color};"></span>
@@ -1289,6 +1309,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
             person_id: key,
             owed_by_name: person?.name || pid,
             owed_by_phone: person?.phone || '',
+            owed_by_email: person?.email || '',
             amount_owed: 0,
             is_paid: false
           }
@@ -1350,7 +1371,8 @@ table.sheet tbody td:first-child { padding-left:20px; }
               return {
                 id: pid,
                 name: person?.name || (pid === 'me' ? 'Me (you)' : pid),
-                phone: person?.phone || ''
+                phone: person?.phone || '',
+                email: person?.email || ''
               }
             }),
             splitType: row.splitType
@@ -1438,6 +1460,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
         id: person.id,
         name: person.name || 'Unnamed person',
         phone: person.phone || '',
+        email: person.email || '',
         color: COLORS[PEOPLE.length % COLORS.length]
       })
     }
@@ -1453,7 +1476,8 @@ table.sheet tbody td:first-child { padding-left:20px; }
       const person = {
         id,
         name: split.owed_by_name || split.name || `Person ${index + 1}`,
-        phone: split.owed_by_phone || split.phone || ''
+        phone: split.owed_by_phone || split.phone || '',
+        email: split.owed_by_email || split.email || ''
       }
       addEditingPerson(person)
       knownByName.set(person.name, person)
