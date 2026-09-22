@@ -64,10 +64,12 @@ nav { position:sticky; top:0; z-index:100; display:flex; align-items:center; jus
 
 /* PANEL */
 .panel { background:var(--bg2); border:1px solid var(--border); border-radius:var(--rl); overflow:hidden; }
-.panel-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); }
+.panel-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); gap:10px; }
 .panel-title { font-family:var(--ff-d); font-size:14px; font-weight:500; color:var(--text); letter-spacing:-.1px; }
-.panel-btn { font-size:11px; color:var(--text3); border:1px solid var(--border); border-radius:6px; padding:4px 10px; background:transparent; cursor:pointer; font-family:var(--ff-b); transition:all .2s; text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
+.panel-btn { font-size:11px; color:var(--text3); border:1px solid var(--border); border-radius:6px; padding:4px 10px; background:transparent; cursor:pointer; font-family:var(--ff-b); transition:all .2s; text-decoration:none; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
 .panel-btn:hover { border-color:var(--border2); color:var(--text2); }
+.panel-btn:disabled { opacity:.4; cursor:not-allowed; }
+.panel-btn:disabled:hover { border-color:var(--border); color:var(--text3); }
 
 /* EMPTY STATE */
 .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:52px 24px; text-align:center; gap:12px; }
@@ -121,6 +123,8 @@ nav { position:sticky; top:0; z-index:100; display:flex; align-items:center; jus
 .owed-fill { height:100%; background:var(--blue); border-radius:20px; }
 .owed-footer { display:flex; justify-content:space-between; gap:8px; margin-top:7px; font-size:10px; color:var(--text3); font-family:var(--ff-m); }
 .owed-phone { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.owed-settle-btn { margin-top:10px; width:100%; padding:7px 10px; border-radius:7px; border:1px solid var(--border2); background:transparent; color:var(--text2); font-size:11px; font-family:var(--ff-b); cursor:pointer; transition:all .15s; }
+.owed-settle-btn:hover { border-color:var(--aborder); color:var(--accent); background:var(--adim); }
 
 /* TIPS GRID */
 .tips-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:32px; animation:fadeUp .45s ease both .24s; }
@@ -142,6 +146,23 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 .loader-row { display:flex; align-items:center; justify-content:center; padding:24px; gap:10px; color:var(--text3); font-size:12px; font-family:var(--ff-m); }
 .spin { width:14px; height:14px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
 @keyframes spin { to{transform:rotate(360deg);} }
+
+/* SETTLE MODAL */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px; }
+.modal-box { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--rl); width:100%; max-width:380px; padding:24px; animation:fadeUp .3s ease both; }
+.modal-title { font-family:var(--ff-d); font-size:17px; font-weight:500; color:var(--text); margin-bottom:4px; }
+.modal-sub { font-size:12px; color:var(--text3); margin-bottom:18px; line-height:1.5; }
+.modal-field { margin-bottom:16px; }
+.modal-label { font-size:10px; color:var(--text2); text-transform:uppercase; letter-spacing:.08em; font-family:var(--ff-m); margin-bottom:7px; display:block; }
+.modal-select, .modal-input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border2); background:var(--bg3); color:var(--text); font-size:13px; font-family:var(--ff-b); outline:none; }
+.modal-select:focus, .modal-input:focus { border-color:var(--aborder); }
+.modal-hint { font-size:11px; color:var(--text3); margin-top:7px; font-family:var(--ff-m); }
+.modal-error { font-size:11px; color:var(--red); margin-top:7px; display:none; font-family:var(--ff-m); }
+.modal-actions { display:flex; gap:10px; margin-top:22px; }
+.modal-btn-primary { flex:1; padding:10px; border-radius:8px; background:var(--accent); color:#0C0C0D; border:none; font-size:13px; font-weight:500; cursor:pointer; font-family:var(--ff-b); transition:background .15s; }
+.modal-btn-primary:hover { background:var(--accent2); }
+.modal-btn-ghost { padding:10px 16px; border-radius:8px; background:transparent; border:1px solid var(--border2); color:var(--text2); font-size:13px; cursor:pointer; font-family:var(--ff-b); transition:all .15s; }
+.modal-btn-ghost:hover { border-color:var(--border2); color:var(--text); }
 
 
 @media (max-width: 800px) {
@@ -207,7 +228,10 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 
     <div style="display:flex; flex-direction:column; gap:16px;">
       <div class="panel">
-        <div class="panel-head"><div class="panel-title">Who owes you</div></div>
+        <div class="panel-head">
+          <div class="panel-title">Who owes you</div>
+          <button class="panel-btn" id="openSettleBtn" type="button" disabled>Settle balances</button>
+        </div>
         <div id="owedContainer">
           <div class="loader-row"><div class="spin"></div> Loading…</div>
         </div>
@@ -252,6 +276,28 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   </div>
 </footer>
 
+<!-- ── SETTLE BALANCES MODAL ── -->
+<div class="modal-overlay" id="settleModal" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-title">Settle a balance</div>
+    <div class="modal-sub">Choose who paid you back and how much. Partial amounts are applied to their oldest unpaid expenses first.</div>
+    <div class="modal-field">
+      <label class="modal-label" for="settlePerson">Person</label>
+      <select class="modal-select" id="settlePerson"></select>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label" for="settleAmount">Amount to settle</label>
+      <input class="modal-input" type="number" id="settleAmount" step="0.01" min="0.01">
+      <div class="modal-hint" id="settleHint"></div>
+      <div class="modal-error" id="settleError">Enter an amount between $0.01 and the amount owed.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn-ghost" type="button" id="settleCancelBtn">Cancel</button>
+      <button class="modal-btn-primary" type="button" id="settleConfirmBtn">Mark as settled</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── PAGE LOGIC ── -->
 <script>
   // Expenses are read from localStorage so the interface remains functional
@@ -284,12 +330,30 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     }
   }
 
+  function saveExpenses(expenses) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses))
+      return true
+    } catch (error) {
+      console.error('Could not save local expenses:', error)
+      return false
+    }
+  }
+
   function getAllSplits(expenses) {
     return expenses.flatMap(expense =>
       Array.isArray(expense.splits)
         ? expense.splits.map(split => ({ ...split, expense_id: expense.id }))
         : []
     )
+  }
+
+  // A split can now be partially paid via `paid_amount`. Remaining balance
+  // is what's still owed after subtracting anything already settled.
+  function splitRemaining(split) {
+    const total = Number(split.amount_owed || split.amount || 0)
+    const paid = Number(split.paid_amount || 0)
+    return Math.max(0, total - paid)
   }
 
   // ─────────────────────────────────────────────
@@ -323,14 +387,12 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     const totalThisMonth = thisMonth.reduce((sum, expense) =>
       sum + Number(expense.total_amount || expense.amount || 0), 0)
 
-    const unpaidSplits = splits.filter(split => !split.is_paid)
-    const owedTotal = unpaidSplits.reduce((sum, split) =>
-      sum + Number(split.amount_owed || split.amount || 0), 0)
+    const unpaidSplits = splits.filter(split => splitRemaining(split) > 0.004)
+    const owedTotal = unpaidSplits.reduce((sum, split) => sum + splitRemaining(split), 0)
 
     const allTotal = expenses.reduce((sum, expense) =>
       sum + Number(expense.total_amount || expense.amount || 0), 0)
-    const allOwed = splits.reduce((sum, split) =>
-      sum + Number(split.amount_owed || split.amount || 0), 0)
+    const allOwedRemaining = splits.reduce((sum, split) => sum + splitRemaining(split), 0)
 
     document.getElementById('statTotal').textContent = '$' + totalThisMonth.toFixed(2)
     document.getElementById('statTotalHint').textContent =
@@ -338,7 +400,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     document.getElementById('statOwed').textContent = '$' + owedTotal.toFixed(2)
     document.getElementById('statOwedHint').textContent =
       unpaidSplits.length ? `${unpaidSplits.length} pending` : 'No splits yet'
-    document.getElementById('statNet').textContent = '$' + (allTotal - allOwed).toFixed(2)
+    document.getElementById('statNet').textContent = '$' + (allTotal - allOwedRemaining).toFixed(2)
     document.getElementById('statCount').textContent = expenses.length
   }
 
@@ -364,7 +426,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     let html = '<div class="txn-list">'
     expenses.slice(0, 8).forEach(expense => {
       const itemSplits = splits.filter(split => split.expense_id === expense.id)
-      const hasUnpaid = itemSplits.some(split => !split.is_paid)
+      const hasUnpaid = itemSplits.some(split => splitRemaining(split) > 0.004)
       const badge = hasUnpaid
         ? '<span class="txn-badge badge-pending">split pending</span>'
         : itemSplits.length
@@ -425,37 +487,23 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     )
   }
 
-  function renderOwed(splits) {
-    const container = document.getElementById('owedContainer')
-    const unpaid = splits.filter(split => !split.is_paid)
-
-    if (unpaid.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state" style="padding:28px 20px;">
-          <div style="font-size:24px;">📬</div>
-          <div class="empty-sub">No pending balances. People will appear here after you assign or split an expense.</div>
-        </div>`
-      return
-    }
-
+  // Shared by the "Who owes you" list and the settle modal's person picker.
+  function computeOwedByPerson(splits) {
+    const unpaid = splits.filter(split => splitRemaining(split) > 0.004)
     const byPerson = {}
 
     unpaid.forEach(split => {
       const key = personGroupingKey(split)
       const name = split.owed_by_name || split.name || 'Unnamed person'
-      const amount = Number(split.amount_owed || split.amount || 0)
+      const amount = splitRemaining(split)
       const phone = split.owed_by_phone || split.phone || ''
       const email = split.owed_by_email || split.email || ''
       const expenseId = split.expense_id || ''
 
       if (!byPerson[key]) {
         byPerson[key] = {
-          name,
-          amount: 0,
-          phone,
-          email,
-          expenseIds: new Set(),
-          splitCount: 0
+          key, name, amount: 0, phone, email,
+          expenseIds: new Set(), splitCount: 0
         }
       }
 
@@ -466,7 +514,25 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       if (!byPerson[key].email && email) byPerson[key].email = email
     })
 
-    const people = Object.values(byPerson).sort((a,b) => b.amount - a.amount)
+    return Object.values(byPerson).sort((a, b) => b.amount - a.amount)
+  }
+
+  function renderOwed(splits) {
+    const container = document.getElementById('owedContainer')
+    const people = computeOwedByPerson(splits)
+    const settleBtn = document.getElementById('openSettleBtn')
+
+    settleBtn.disabled = people.length === 0
+
+    if (people.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding:28px 20px;">
+          <div style="font-size:24px;">📬</div>
+          <div class="empty-sub">No pending balances. People will appear here after you assign or split an expense.</div>
+        </div>`
+      return
+    }
+
     const largestAmount = Math.max(...people.map(info => info.amount), 1)
     const totalOutstanding = people.reduce((sum, info) => sum + info.amount, 0)
 
@@ -491,6 +557,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
             <span class="owed-phone">${escHtml(contactText)}</span>
             <span>${Math.round((info.amount / totalOutstanding) * 100)}% of outstanding</span>
           </div>
+          <button class="owed-settle-btn" type="button" data-person="${escHtml(info.key)}">Settle</button>
         </div>`
     }).join('')
   }
@@ -534,6 +601,108 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;')
   }
+
+  // ─────────────────────────────────────────────
+  //  SETTLE BALANCES MODAL
+  // ─────────────────────────────────────────────
+  let settlePeopleCache = []
+
+  function openSettleModal(presetKey) {
+    const splits = getAllSplits(getExpenses())
+    settlePeopleCache = computeOwedByPerson(splits)
+    if (settlePeopleCache.length === 0) return
+
+    const select = document.getElementById('settlePerson')
+    select.innerHTML = settlePeopleCache
+      .map(p => `<option value="${escHtml(p.key)}">${escHtml(p.name)} — $${p.amount.toFixed(2)} owed</option>`)
+      .join('')
+
+    if (presetKey && settlePeopleCache.some(p => p.key === presetKey)) {
+      select.value = presetKey
+    }
+
+    document.getElementById('settleError').style.display = 'none'
+    updateSettleAmountField()
+    document.getElementById('settleModal').style.display = 'flex'
+  }
+
+  function updateSettleAmountField() {
+    const select = document.getElementById('settlePerson')
+    const person = settlePeopleCache.find(p => p.key === select.value)
+    if (!person) return
+
+    const amountInput = document.getElementById('settleAmount')
+    const hint = document.getElementById('settleHint')
+    amountInput.max = person.amount.toFixed(2)
+    amountInput.value = person.amount.toFixed(2)
+    hint.textContent = `Up to $${person.amount.toFixed(2)} owed by ${person.name}`
+    document.getElementById('settleError').style.display = 'none'
+  }
+
+  function closeSettleModal() {
+    document.getElementById('settleModal').style.display = 'none'
+  }
+
+  function confirmSettle() {
+    const select = document.getElementById('settlePerson')
+    const amountInput = document.getElementById('settleAmount')
+    const errorEl = document.getElementById('settleError')
+
+    const key = select.value
+    const amount = Number(amountInput.value)
+    const max = Number(amountInput.max)
+
+    if (!key || !Number.isFinite(amount) || amount <= 0 || amount > max + 0.001) {
+      errorEl.style.display = 'block'
+      return
+    }
+
+    settlePerson(key, amount)
+    closeSettleModal()
+  }
+
+  // Applies a payment to a person's unpaid splits, oldest expense first,
+  // marking a split fully paid once its remaining balance is covered.
+  function settlePerson(personKey, amountToSettle) {
+    const expenses = getExpenses()
+    const targets = []
+
+    expenses.forEach(expense => {
+      if (!Array.isArray(expense.splits)) return
+      expense.splits.forEach(split => {
+        if (personGroupingKey(split) === personKey && splitRemaining(split) > 0.004) {
+          targets.push({ split, date: expenseDate(expense) })
+        }
+      })
+    })
+
+    targets.sort((a, b) => a.date - b.date)
+
+    let remainingToApply = amountToSettle
+    for (const { split } of targets) {
+      if (remainingToApply <= 0.004) break
+      const remaining = splitRemaining(split)
+      const apply = Math.min(remaining, remainingToApply)
+      split.paid_amount = Number((Number(split.paid_amount || 0) + apply).toFixed(2))
+      if (splitRemaining(split) <= 0.004) split.is_paid = true
+      remainingToApply -= apply
+    }
+
+    saveExpenses(expenses)
+    loadDashboard()
+  }
+
+  document.getElementById('openSettleBtn').addEventListener('click', () => openSettleModal())
+  document.getElementById('settleCancelBtn').addEventListener('click', closeSettleModal)
+  document.getElementById('settleConfirmBtn').addEventListener('click', confirmSettle)
+  document.getElementById('settlePerson').addEventListener('change', updateSettleAmountField)
+  document.getElementById('settleModal').addEventListener('click', event => {
+    if (event.target.id === 'settleModal') closeSettleModal()
+  })
+  document.getElementById('owedContainer').addEventListener('click', event => {
+    const btn = event.target.closest('.owed-settle-btn')
+    if (btn) openSettleModal(btn.dataset.person)
+  })
 
   document.getElementById('refreshTip').addEventListener('click', event => {
     event.preventDefault()
