@@ -7,6 +7,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- ── SUPABASE SDK (for the session guard) ── -->
+<script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+  }
+}
+</script>
+<script type="module" src="supabase.js"></script>
+<!-- ─────────────────────────── -->
+
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -118,15 +130,25 @@ nav{height:56px;padding:0 28px;display:flex;align-items:center;justify-content:s
       <button class="modal-share-btn" type="button" id="sendCopyMsgBtn">📋 Copy message</button>
       <button class="modal-share-btn" type="button" id="sendCopyLinkBtn">🔗 Copy shareable link</button>
     </div>
-    <div class="modal-note">The link opens a read-only snapshot of this person's charges — it doesn't need an account, but it also won't update if you edit the expense later. No data leaves your device except what's inside the link or message itself.</div>
+    <div class="modal-note">Text, email, copy message, and native share all work straight from your device — nothing is uploaded. Shareable links aren't available yet: that needs the expense to live somewhere other than this browser's local storage, so "Copy shareable link" is disabled for now.</div>
     <button class="modal-close-btn" type="button" id="sendModalCloseBtn">Close</button>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
+<!-- ── SESSION GUARD — redirect to login if not authenticated ── -->
+<script type="module">
+  import { supabase } from './supabase.js'
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    window.location.href = 'login.html'
+  }
+</script>
+
 <script>
 const STORAGE_KEY = 'tillerman_expenses'
+let pendingSendPerson = null
 
 function esc(value=''){
   return String(value)
@@ -181,6 +203,13 @@ function getAssignmentLabel(item, personMap){
   }
 
   return unique.join(', ')
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast')
+  t.textContent = msg
+  t.classList.add('show')
+  setTimeout(() => t.classList.remove('show'), 2400)
 }
 
 function render(){
@@ -265,7 +294,7 @@ function render(){
           <div class="person-amount">${money(info.amount)}</div>
         </div>
         <div class="track"><div class="fill" style="width:${width}%"></div></div>
-        <button class="send-btn" type="button" data-send-person="${esc(name)}">Send to ${esc(name.split(' ')[0] || name)} →</button>
+        <button class="send-btn" type="button" data-send-person="${esc(name)}" data-send-phone="${esc(info.phone)}" data-send-amount="${info.amount}">Send to ${esc(name.split(' ')[0] || name)} →</button>
       </div>`
   }).join('') : `<div class="empty">This was saved as a personal expense.</div>`
 
@@ -332,6 +361,94 @@ function render(){
       </div>
     </div>`
 }
+
+// ─────────────────────────────────────────────
+//  SEND / SHARE MODAL LOGIC
+// ─────────────────────────────────────────────
+function buildShareMessage(personName, amount, merchant){
+  const firstName = personName.split(' ')[0] || personName
+  return `Hey ${firstName}, you owe ${money(amount)} for ${merchant} — let me know when you get a chance to settle up!`
+}
+
+function openSendModal(name, phone, amount){
+  const expense = getExpenses().find(item => String(item.id) === String(getId()))
+  if(!expense) return
+
+  pendingSendPerson = { name, phone, amount }
+  const message = buildShareMessage(name, amount, expense.merchant || expense.description || 'a recent expense')
+
+  document.getElementById('sendModalTitle').textContent = 'Send to ' + name
+  document.getElementById('sendModalPreview').textContent = message
+  document.getElementById('sendModal').classList.add('show')
+}
+
+function closeSendModal(){
+  document.getElementById('sendModal').classList.remove('show')
+  pendingSendPerson = null
+}
+
+document.getElementById('page').addEventListener('click', event => {
+  const btn = event.target.closest('[data-send-person]')
+  if(!btn) return
+  openSendModal(
+    btn.dataset.sendPerson,
+    btn.dataset.sendPhone || '',
+    Number(btn.dataset.sendAmount || 0)
+  )
+})
+
+document.getElementById('sendModalCloseBtn').addEventListener('click', closeSendModal)
+document.getElementById('sendModal').addEventListener('click', event => {
+  if(event.target.id === 'sendModal') closeSendModal()
+})
+
+document.getElementById('sendCopyMsgBtn').addEventListener('click', async () => {
+  const text = document.getElementById('sendModalPreview').textContent
+  try{
+    await navigator.clipboard.writeText(text)
+    showToast('Message copied')
+  }catch(error){
+    console.error(error)
+    showToast('Could not copy — try selecting the text manually')
+  }
+})
+
+document.getElementById('sendTextBtn').addEventListener('click', () => {
+  if(!pendingSendPerson) return
+  const body = encodeURIComponent(document.getElementById('sendModalPreview').textContent)
+  const phone = pendingSendPerson.phone.replace(/[^\d+]/g,'')
+  window.location.href = `sms:${phone}${phone ? '&' : '?'}body=${body}`
+})
+
+document.getElementById('sendEmailBtn').addEventListener('click', () => {
+  const subject = encodeURIComponent('What you owe')
+  const body = encodeURIComponent(document.getElementById('sendModalPreview').textContent)
+  window.location.href = `mailto:?subject=${subject}&body=${body}`
+})
+
+document.getElementById('sendShareBtn').addEventListener('click', async () => {
+  const text = document.getElementById('sendModalPreview').textContent
+  if(navigator.share){
+    try{
+      await navigator.share({ text })
+    }catch(error){
+      if(error?.name !== 'AbortError') showToast('Could not open the share sheet')
+    }
+  }else{
+    try{
+      await navigator.clipboard.writeText(text)
+      showToast('Sharing isn\u2019t supported here — message copied instead')
+    }catch(error){
+      console.error(error)
+      showToast('Sharing isn\u2019t supported on this device')
+    }
+  }
+})
+
+document.getElementById('sendCopyLinkBtn').addEventListener('click', () => {
+  showToast('Shareable links aren\u2019t available yet in this local prototype')
+})
+document.getElementById('sendCopyLinkBtn').disabled = true
 
 render()
 </script>
