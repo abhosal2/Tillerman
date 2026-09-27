@@ -7,18 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-
-<!-- ── SUPABASE SDK (for the session guard) ── -->
-<script type="importmap">
-{
-  "imports": {
-    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
-  }
-}
-</script>
-<script type="module" src="supabase.js"></script>
-<!-- ─────────────────────────── -->
-
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -117,38 +105,10 @@ nav{height:56px;padding:0 28px;display:flex;align-items:center;justify-content:s
   <div class="empty">Loading transaction…</div>
 </main>
 
-<!-- ── SEND / SHARE MODAL ── -->
-<div class="modal-overlay" id="sendModal">
-  <div class="modal-box">
-    <div class="modal-title" id="sendModalTitle">Send to person</div>
-    <div class="modal-sub" id="sendModalSub">Share their itemized charges and what they owe.</div>
-    <div class="modal-preview" id="sendModalPreview"></div>
-    <div class="modal-btn-row">
-      <button class="modal-share-btn primary" type="button" id="sendShareBtn">📤 Share…</button>
-      <button class="modal-share-btn" type="button" id="sendTextBtn">💬 Text message</button>
-      <button class="modal-share-btn" type="button" id="sendEmailBtn">✉️ Email</button>
-      <button class="modal-share-btn" type="button" id="sendCopyMsgBtn">📋 Copy message</button>
-      <button class="modal-share-btn" type="button" id="sendCopyLinkBtn">🔗 Copy shareable link</button>
-    </div>
-    <div class="modal-note">Text, email, copy message, and native share all work straight from your device — nothing is uploaded. Shareable links aren't available yet: that needs the expense to live somewhere other than this browser's local storage, so "Copy shareable link" is disabled for now.</div>
-    <button class="modal-close-btn" type="button" id="sendModalCloseBtn">Close</button>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
-
-<!-- ── SESSION GUARD — redirect to login if not authenticated ── -->
-<script type="module">
-  import { supabase } from './supabase.js'
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
-    window.location.href = 'login.html'
-  }
-</script>
 
 <script>
 const STORAGE_KEY = 'tillerman_expenses'
-let pendingSendPerson = null
 
 function esc(value=''){
   return String(value)
@@ -205,12 +165,97 @@ function getAssignmentLabel(item, personMap){
   return unique.join(', ')
 }
 
-function showToast(msg){
-  const t = document.getElementById('toast')
-  t.textContent = msg
-  t.classList.add('show')
-  setTimeout(() => t.classList.remove('show'), 2400)
-}
+  // Copies only the selected person's allocated items, across the requested expenses.
+  function personKeyForBill(split) {
+    if (split.person_id) return 'id:' + String(split.person_id)
+    const email = String(split.owed_by_email || split.email || '').trim().toLowerCase()
+    if (email) return 'email:' + email
+    const phone = String(split.owed_by_phone || split.phone || '').replace(/\D/g, '').slice(-10)
+    if (phone) return 'phone:' + phone
+    return 'name:' + String(split.owed_by_name || split.name || 'Unnamed person').trim().toLowerCase().replace(/\s+/g, ' ')
+  }
+
+  function personItemAmount(item, split) {
+    const assignees = Array.isArray(item.assignees) ? item.assignees : []
+    const details = Array.isArray(item.assigneeDetails) ? item.assigneeDetails : []
+    const splitId = String(split.person_id || '')
+    const targetName = String(split.owed_by_name || split.name || '').trim().toLowerCase()
+    const matches = id => {
+      if (splitId && String(id) === splitId) return true
+      const person = details.find(p => String(p.id) === String(id))
+      return !!person && !!targetName && String(person.name || '').trim().toLowerCase() === targetName
+    }
+    if (!assignees.some(matches)) return null
+    const type = item.splitType || item.split_type || 'mine'
+    if (type === 'mine') return null
+    const qty = Number(item.qty ?? item.quantity ?? 1)
+    const unit = Number(item.unitPrice ?? item.unit_price ?? 0)
+    const total = qty * unit
+    const count = type === 'theirs' ? assignees.filter(id => id !== 'me').length : assignees.length
+    if (!Number.isFinite(total) || count < 1) return null
+    return { name: item.name || item.item_name || 'Unnamed item', qty, amount: total / count, shared: count > 1 }
+  }
+
+  function buildPersonBill(personKey, onlyExpenseId = null) {
+    const expenses = getExpenses()
+    const lines = []
+    let totalDue = 0, name = '', found = false
+    for (const expense of expenses) {
+      if (onlyExpenseId !== null && String(expense.id) !== String(onlyExpenseId)) continue
+      const splits = Array.isArray(expense.splits) ? expense.splits : []
+      const matching = splits.filter(s => personKeyForBill(s) === personKey && !s.is_paid &&
+        Math.max(0, Number(s.amount_owed ?? s.amount ?? 0) - Number(s.paid_amount || 0)) > 0.004)
+      if (!matching.length) continue
+      found = true
+      const merchant = expense.merchant || expense.description || 'Expense'
+      const dateValue = expense.expense_date || expense.created_at
+      const date = dateValue ? new Date(dateValue) : null
+      const dateText = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''
+      lines.push('', `${merchant}${dateText ? ' — ' + dateText : ''}`)
+      const items = Array.isArray(expense.items) ? expense.items : []
+      for (const split of matching) {
+        name ||= split.owed_by_name || split.name || 'Friend'
+        const due = Math.max(0, Number(split.amount_owed ?? split.amount ?? 0) - Number(split.paid_amount || 0))
+        totalDue += due
+        const assigned = items.map(item => personItemAmount(item, split)).filter(Boolean)
+        if (assigned.length) {
+          for (const item of assigned) lines.push(`• ${item.name}${item.qty !== 1 ? ' (qty ' + item.qty + ')' : ''}${item.shared ? ' (your share)' : ''}: $${item.amount.toFixed(2)}`)
+        } else {
+          lines.push('• Your allocated charge (item details unavailable)')
+        }
+        if (Number(split.paid_amount || 0) > 0) lines.push(`  Already paid: $${Number(split.paid_amount).toFixed(2)}`)
+        lines.push(`  Remaining for this expense: $${due.toFixed(2)}`)
+      }
+    }
+    if (!found) return null
+    return `Hi ${name}, here is your itemized bill from Tillerman:` + lines.join('\n') + `\n\nTOTAL STILL OWED: $${totalDue.toFixed(2)}`
+  }
+
+  async function copyPersonBill(personKey, expenseId, button) {
+    const message = buildPersonBill(personKey, expenseId)
+    if (!message) { alert('No unpaid charges found for this person.'); return }
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(message)
+      } else {
+        const input = document.createElement('textarea')
+        input.value = message
+        input.style.cssText = 'position:fixed;left:-9999px;top:0'
+        document.body.appendChild(input)
+        input.focus(); input.select()
+        const copied = document.execCommand('copy')
+        input.remove()
+        if (!copied) throw new Error('Clipboard unavailable')
+      }
+      const original = button.textContent
+      button.textContent = '✓ Copied!'
+      setTimeout(() => { if (button.isConnected) button.textContent = original }, 2200)
+    } catch (error) {
+      console.error('Could not copy bill:', error)
+      // Keep the bill available even if browser clipboard permission is denied.
+      window.prompt('Copy this itemized bill:', message)
+    }
+  }
 
 function render(){
   const id = getId()
@@ -294,7 +339,7 @@ function render(){
           <div class="person-amount">${money(info.amount)}</div>
         </div>
         <div class="track"><div class="fill" style="width:${width}%"></div></div>
-        <button class="send-btn" type="button" data-send-person="${esc(name)}" data-send-phone="${esc(info.phone)}" data-send-amount="${info.amount}">Send to ${esc(name.split(' ')[0] || name)} →</button>
+        <button class="send-btn" type="button" data-send-person="${esc(name)}">Send to ${esc(name.split(' ')[0] || name)} · Copy bill</button>
       </div>`
   }).join('') : `<div class="empty">This was saved as a personal expense.</div>`
 
@@ -362,93 +407,16 @@ function render(){
     </div>`
 }
 
-// ─────────────────────────────────────────────
-//  SEND / SHARE MODAL LOGIC
-// ─────────────────────────────────────────────
-function buildShareMessage(personName, amount, merchant){
-  const firstName = personName.split(' ')[0] || personName
-  return `Hey ${firstName}, you owe ${money(amount)} for ${merchant} — let me know when you get a chance to settle up!`
-}
-
-function openSendModal(name, phone, amount){
-  const expense = getExpenses().find(item => String(item.id) === String(getId()))
-  if(!expense) return
-
-  pendingSendPerson = { name, phone, amount }
-  const message = buildShareMessage(name, amount, expense.merchant || expense.description || 'a recent expense')
-
-  document.getElementById('sendModalTitle').textContent = 'Send to ' + name
-  document.getElementById('sendModalPreview').textContent = message
-  document.getElementById('sendModal').classList.add('show')
-}
-
-function closeSendModal(){
-  document.getElementById('sendModal').classList.remove('show')
-  pendingSendPerson = null
-}
-
 document.getElementById('page').addEventListener('click', event => {
-  const btn = event.target.closest('[data-send-person]')
-  if(!btn) return
-  openSendModal(
-    btn.dataset.sendPerson,
-    btn.dataset.sendPhone || '',
-    Number(btn.dataset.sendAmount || 0)
-  )
+  const button = event.target.closest('[data-send-person]')
+  if (!button) return
+  const expense = getExpenses().find(e => String(e.id) === String(getId()))
+  if (!expense) return
+  const split = (expense.splits || []).find(s =>
+    String(s.owed_by_name || s.name || 'Unnamed person') === button.dataset.sendPerson && !s.is_paid)
+  if (!split) { alert('No outstanding charges found for this person.'); return }
+  copyPersonBill(personKeyForBill(split), expense.id, button)
 })
-
-document.getElementById('sendModalCloseBtn').addEventListener('click', closeSendModal)
-document.getElementById('sendModal').addEventListener('click', event => {
-  if(event.target.id === 'sendModal') closeSendModal()
-})
-
-document.getElementById('sendCopyMsgBtn').addEventListener('click', async () => {
-  const text = document.getElementById('sendModalPreview').textContent
-  try{
-    await navigator.clipboard.writeText(text)
-    showToast('Message copied')
-  }catch(error){
-    console.error(error)
-    showToast('Could not copy — try selecting the text manually')
-  }
-})
-
-document.getElementById('sendTextBtn').addEventListener('click', () => {
-  if(!pendingSendPerson) return
-  const body = encodeURIComponent(document.getElementById('sendModalPreview').textContent)
-  const phone = pendingSendPerson.phone.replace(/[^\d+]/g,'')
-  window.location.href = `sms:${phone}${phone ? '&' : '?'}body=${body}`
-})
-
-document.getElementById('sendEmailBtn').addEventListener('click', () => {
-  const subject = encodeURIComponent('What you owe')
-  const body = encodeURIComponent(document.getElementById('sendModalPreview').textContent)
-  window.location.href = `mailto:?subject=${subject}&body=${body}`
-})
-
-document.getElementById('sendShareBtn').addEventListener('click', async () => {
-  const text = document.getElementById('sendModalPreview').textContent
-  if(navigator.share){
-    try{
-      await navigator.share({ text })
-    }catch(error){
-      if(error?.name !== 'AbortError') showToast('Could not open the share sheet')
-    }
-  }else{
-    try{
-      await navigator.clipboard.writeText(text)
-      showToast('Sharing isn\u2019t supported here — message copied instead')
-    }catch(error){
-      console.error(error)
-      showToast('Sharing isn\u2019t supported on this device')
-    }
-  }
-})
-
-document.getElementById('sendCopyLinkBtn').addEventListener('click', () => {
-  showToast('Shareable links aren\u2019t available yet in this local prototype')
-})
-document.getElementById('sendCopyLinkBtn').disabled = true
 
 render()
 </script>
