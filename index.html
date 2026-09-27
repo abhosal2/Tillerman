@@ -517,6 +517,98 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     return Object.values(byPerson).sort((a, b) => b.amount - a.amount)
   }
 
+  // Copies only the selected person's allocated items, across the requested expenses.
+  function personKeyForBill(split) {
+    if (split.person_id) return 'id:' + String(split.person_id)
+    const email = String(split.owed_by_email || split.email || '').trim().toLowerCase()
+    if (email) return 'email:' + email
+    const phone = String(split.owed_by_phone || split.phone || '').replace(/\D/g, '').slice(-10)
+    if (phone) return 'phone:' + phone
+    return 'name:' + String(split.owed_by_name || split.name || 'Unnamed person').trim().toLowerCase().replace(/\s+/g, ' ')
+  }
+
+  function personItemAmount(item, split) {
+    const assignees = Array.isArray(item.assignees) ? item.assignees : []
+    const details = Array.isArray(item.assigneeDetails) ? item.assigneeDetails : []
+    const splitId = String(split.person_id || '')
+    const targetName = String(split.owed_by_name || split.name || '').trim().toLowerCase()
+    const matches = id => {
+      if (splitId && String(id) === splitId) return true
+      const person = details.find(p => String(p.id) === String(id))
+      return !!person && !!targetName && String(person.name || '').trim().toLowerCase() === targetName
+    }
+    if (!assignees.some(matches)) return null
+    const type = item.splitType || item.split_type || 'mine'
+    if (type === 'mine') return null
+    const qty = Number(item.qty ?? item.quantity ?? 1)
+    const unit = Number(item.unitPrice ?? item.unit_price ?? 0)
+    const total = qty * unit
+    const count = type === 'theirs' ? assignees.filter(id => id !== 'me').length : assignees.length
+    if (!Number.isFinite(total) || count < 1) return null
+    return { name: item.name || item.item_name || 'Unnamed item', qty, amount: total / count, shared: count > 1 }
+  }
+
+  function buildPersonBill(personKey, onlyExpenseId = null) {
+    const expenses = getExpenses()
+    const lines = []
+    let totalDue = 0, name = '', found = false
+    for (const expense of expenses) {
+      if (onlyExpenseId !== null && String(expense.id) !== String(onlyExpenseId)) continue
+      const splits = Array.isArray(expense.splits) ? expense.splits : []
+      const matching = splits.filter(s => personKeyForBill(s) === personKey && !s.is_paid &&
+        Math.max(0, Number(s.amount_owed ?? s.amount ?? 0) - Number(s.paid_amount || 0)) > 0.004)
+      if (!matching.length) continue
+      found = true
+      const merchant = expense.merchant || expense.description || 'Expense'
+      const dateValue = expense.expense_date || expense.created_at
+      const date = dateValue ? new Date(dateValue) : null
+      const dateText = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''
+      lines.push('', `${merchant}${dateText ? ' — ' + dateText : ''}`)
+      const items = Array.isArray(expense.items) ? expense.items : []
+      for (const split of matching) {
+        name ||= split.owed_by_name || split.name || 'Friend'
+        const due = Math.max(0, Number(split.amount_owed ?? split.amount ?? 0) - Number(split.paid_amount || 0))
+        totalDue += due
+        const assigned = items.map(item => personItemAmount(item, split)).filter(Boolean)
+        if (assigned.length) {
+          for (const item of assigned) lines.push(`• ${item.name}${item.qty !== 1 ? ' (qty ' + item.qty + ')' : ''}${item.shared ? ' (your share)' : ''}: $${item.amount.toFixed(2)}`)
+        } else {
+          lines.push('• Your allocated charge (item details unavailable)')
+        }
+        if (Number(split.paid_amount || 0) > 0) lines.push(`  Already paid: $${Number(split.paid_amount).toFixed(2)}`)
+        lines.push(`  Remaining for this expense: $${due.toFixed(2)}`)
+      }
+    }
+    if (!found) return null
+    return `Hi ${name}, here is your itemized bill from Tillerman:` + lines.join('\n') + `\n\nTOTAL STILL OWED: $${totalDue.toFixed(2)}`
+  }
+
+  async function copyPersonBill(personKey, expenseId, button) {
+    const message = buildPersonBill(personKey, expenseId)
+    if (!message) { alert('No unpaid charges found for this person.'); return }
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(message)
+      } else {
+        const input = document.createElement('textarea')
+        input.value = message
+        input.style.cssText = 'position:fixed;left:-9999px;top:0'
+        document.body.appendChild(input)
+        input.focus(); input.select()
+        const copied = document.execCommand('copy')
+        input.remove()
+        if (!copied) throw new Error('Clipboard unavailable')
+      }
+      const original = button.textContent
+      button.textContent = '✓ Copied!'
+      setTimeout(() => { if (button.isConnected) button.textContent = original }, 2200)
+    } catch (error) {
+      console.error('Could not copy bill:', error)
+      // Keep the bill available even if browser clipboard permission is denied.
+      window.prompt('Copy this itemized bill:', message)
+    }
+  }
+
   function renderOwed(splits) {
     const container = document.getElementById('owedContainer')
     const people = computeOwedByPerson(splits)
@@ -557,10 +649,16 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
             <span class="owed-phone">${escHtml(contactText)}</span>
             <span>${Math.round((info.amount / totalOutstanding) * 100)}% of outstanding</span>
           </div>
+          <button class="owed-settle-btn" type="button" data-copy-person="${escHtml(info.key)}">📋 Send to ${escHtml(info.name.split(' ')[0])} · Copy bill</button>
           <button class="owed-settle-btn" type="button" data-person="${escHtml(info.key)}">Settle</button>
         </div>`
     }).join('')
   }
+
+  document.getElementById('owedContainer').addEventListener('click', event => {
+    const button = event.target.closest('[data-copy-person]')
+    if (button) copyPersonBill(button.dataset.copyPerson, null, button)
+  })
 
   function renderCategories(expenses, startOfMonth) {
     const container = document.getElementById('categoryContainer')
