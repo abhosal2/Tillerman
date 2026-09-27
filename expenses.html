@@ -8,6 +8,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
+<!-- ── SUPABASE SDK ── -->
+<script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+  }
+}
+</script>
+<script type="module" src="supabase.js"></script>
+<!-- ─────────────────────────── -->
 
 <!-- Browser-side receipt reading. No receipt image is uploaded to Tillerman. -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -395,13 +405,13 @@ table.sheet tbody td:first-child { padding-left:20px; }
               <option>Cash</option>
             </select>
           </div>
-          <div class="field"><div class="label">Split with</div>
-            <select id="m-split">
-              <option value="mine">Just me</option>
-              <option value="equal2">Split equally · 2 people</option>
-              <option value="equal3">Split equally · 3 people</option>
-              <option value="equal4">Split equally · 4 people</option>
-            </select>
+          <div class="field field-full" style="grid-column:1/-1;">
+            <div class="label">Split with (optional)</div>
+            <div class="people-bar" id="manualSplitBar" style="border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);">
+              <span class="people-bar-label">People:</span>
+              <button class="add-person-pill" id="manualAddPersonBtn" type="button">+ Add person</button>
+            </div>
+            <div class="field-help" style="margin-top:6px;">Click a person to include them in an equal split. Leave everyone unselected to keep this just for you.</div>
           </div>
           <div class="field"><div class="label">Your share</div><input type="text" id="m-share" placeholder="$0.00" readonly style="color:var(--accent); font-family:var(--ff-m);"></div>
           <div class="field field-full" style="grid-column:1/-1;"><div class="label">Notes</div><textarea id="m-notes" placeholder="Optional note…" style="min-height:50px;"></textarea></div>
@@ -443,8 +453,17 @@ table.sheet tbody td:first-child { padding-left:20px; }
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<!-- ── LOCAL-ONLY PAGE LOGIC ── -->
-<script>
+<!-- ── PAGE LOGIC (Supabase-backed) ── -->
+<script type="module">
+  import { supabase } from './supabase.js'
+
+  // ── SESSION GUARD ──
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    window.location.href = 'login.html'
+    throw new Error('Redirecting to login')
+  }
+  const currentUser = session.user
 
   // ─────────────────────────────────────────────
   //  PEOPLE STATE
@@ -454,7 +473,8 @@ table.sheet tbody td:first-child { padding-left:20px; }
     { id:'me', name:'Me (you)', phone:'', email:'', color:'#C8F55A' }
   ]
   let participants = ['me']
-  let nextPID = 10
+  let contactsCache = []
+  let manualSplitContacts = []
 
   // ─────────────────────────────────────────────
   //  ROWS STATE
@@ -495,7 +515,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
 
   // ─────────────────────────────────────────────
-  //  SHARED PEOPLE DIRECTORY
+  //  SHARED PEOPLE DIRECTORY (backed by the `contacts` table)
   // ─────────────────────────────────────────────
   function normalizeName(value = '') {
     return String(value).trim().toLowerCase()
@@ -512,34 +532,44 @@ table.sheet tbody td:first-child { padding-left:20px; }
     return String(value).trim().toLowerCase()
   }
 
-  function getSavedPeople() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(PEOPLE_STORAGE_KEY) || '[]')
-      return Array.isArray(saved) ? saved : []
-    } catch (error) {
-      console.error('Could not read saved people:', error)
+  async function loadContacts() {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('id, name, phone, email')
+      .order('created_at', { ascending: true })
+    if (error) {
+      console.error('Could not load contacts:', error)
+      showToast('Could not load your saved people.')
       return []
     }
+    contactsCache = data || []
+    return contactsCache
   }
 
-  function savePeopleDirectory(people) {
-    const unique = []
-    const seen = new Set()
+  function cacheContact(contact) {
+    const idx = contactsCache.findIndex(c => String(c.id) === String(contact.id))
+    if (idx >= 0) contactsCache[idx] = contact
+    else contactsCache.push(contact)
+  }
 
-    people.forEach(person => {
-      if (!person || person.id === 'me') return
-      const key = String(person.id)
-      if (seen.has(key)) return
-      seen.add(key)
-      unique.push({
-        id: person.id,
-        name: person.name || 'Unnamed person',
-        phone: person.phone || '',
-        email: person.email || ''
-      })
-    })
-
-    localStorage.setItem(PEOPLE_STORAGE_KEY, JSON.stringify(unique))
+  async function upsertContact({ id, name, phone, email }) {
+    if (id) {
+      const { data, error } = await supabase
+        .from('contacts')
+        .update({ name, phone: phone || null, email: email || null })
+        .eq('id', id)
+        .select()
+        .single()
+      if (error) throw error
+      return data
+    }
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert({ owner_id: currentUser.id, name, phone: phone || null, email: email || null })
+      .select()
+      .single()
+    if (error) throw error
+    return data
   }
 
   function nameSimilarity(a, b) {
@@ -565,7 +595,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   }
 
   function findPossiblePersonMatch(name, phone, email) {
-    const people = getSavedPeople()
+    const people = contactsCache
     const cleanPhone = normalizePhone(phone)
     const cleanEmail = normalizeEmail(email)
     const cleanName = normalizeName(name)
@@ -596,19 +626,14 @@ table.sheet tbody td:first-child { padding-left:20px; }
     return null
   }
 
-  function registerPerson(person) {
-    const people = getSavedPeople()
-    const index = people.findIndex(item => String(item.id) === String(person.id))
-    if (index >= 0) people[index] = { ...people[index], ...person }
-    else people.push(person)
-    savePeopleDirectory(people)
-  }
-
-  function loadDirectoryPeopleIntoPage() {
-    getSavedPeople().forEach(person => {
-      if (!PEOPLE.some(item => String(item.id) === String(person.id))) {
+  function loadContactsIntoPage() {
+    contactsCache.forEach(contact => {
+      if (!PEOPLE.some(item => String(item.id) === String(contact.id))) {
         PEOPLE.push({
-          ...person,
+          id: contact.id,
+          name: contact.name,
+          phone: contact.phone || '',
+          email: contact.email || '',
           color: COLORS[PEOPLE.length % COLORS.length]
         })
       }
@@ -1147,9 +1172,12 @@ table.sheet tbody td:first-child { padding-left:20px; }
     })
   }
 
-  document.getElementById('addPersonBtn').addEventListener('click', () => {
+  // Shared by both the receipt tab's "+ Add person" and the manual tab's
+  // split picker. Creates or reuses a row in the `contacts` table and
+  // returns the resulting { id, name, phone, email, color } for PEOPLE.
+  async function addNewPersonFlow() {
     const name = prompt("Enter the person's name:")
-    if (!name || !name.trim()) return
+    if (!name || !name.trim()) return null
 
     const phone = prompt("Enter their phone number (optional):") || ''
     const email = prompt("Enter their email address (optional):") || ''
@@ -1157,65 +1185,106 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
     if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       showToast('That email address does not look valid.')
-      return
+      return null
     }
 
-    const incoming = {
-      name: name.trim(),
-      phone: phone.trim(),
-      email: cleanEmail
-    }
-
+    const incoming = { name: name.trim(), phone: phone.trim(), email: cleanEmail }
     const match = findPossiblePersonMatch(incoming.name, incoming.phone, incoming.email)
 
-    if (match) {
-      const existing = match.person
-      const details = [
-        existing.phone ? `Phone: ${existing.phone}` : '',
-        existing.email ? `Email: ${existing.email}` : ''
-      ].filter(Boolean).join('\n')
+    try {
+      if (match) {
+        const existing = match.person
+        const details = [
+          existing.phone ? `Phone: ${existing.phone}` : '',
+          existing.email ? `Email: ${existing.email}` : ''
+        ].filter(Boolean).join('\n')
 
-      const useExisting = confirm(
-        `This may be the same person as "${existing.name}" based on the ${match.reason}.` +
-        `${details ? '\n\n' + details : ''}` +
-        `\n\nUse the existing person instead of creating a duplicate?`
-      )
+        const useExisting = confirm(
+          `This may be the same person as "${existing.name}" based on the ${match.reason}.` +
+          `${details ? '\n\n' + details : ''}` +
+          `\n\nUse the existing person instead of creating a duplicate?`
+        )
 
-      if (useExisting) {
-        const merged = {
-          ...existing,
-          phone: existing.phone || incoming.phone,
-          email: existing.email || incoming.email
+        if (useExisting) {
+          const merged = await upsertContact({
+            id: existing.id,
+            name: existing.name,
+            phone: existing.phone || incoming.phone,
+            email: existing.email || incoming.email
+          })
+          cacheContact(merged)
+
+          let pagePerson = PEOPLE.find(person => String(person.id) === String(merged.id))
+          if (!pagePerson) {
+            pagePerson = {
+              id: merged.id, name: merged.name,
+              phone: merged.phone || '', email: merged.email || '',
+              color: COLORS[PEOPLE.length % COLORS.length]
+            }
+            PEOPLE.push(pagePerson)
+          }
+          showToast(`Using existing person "${pagePerson.name}".`)
+          return pagePerson
         }
-
-        registerPerson(merged)
-
-        let pagePerson = PEOPLE.find(person => String(person.id) === String(merged.id))
-        if (!pagePerson) {
-          pagePerson = { ...merged, color: COLORS[PEOPLE.length % COLORS.length] }
-          PEOPLE.push(pagePerson)
-        }
-
-        if (!participants.includes(pagePerson.id)) participants.push(pagePerson.id)
-        updatePeopleBar()
-        showToast(`Using existing person "${pagePerson.name}".`)
-        return
       }
-    }
 
-    const person = {
-      id: 'person-' + (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
-      name: incoming.name,
-      phone: incoming.phone,
-      email: incoming.email,
-      color: COLORS[PEOPLE.length % COLORS.length]
-    }
+      const created = await upsertContact(incoming)
+      cacheContact(created)
 
-    PEOPLE.push(person)
-    participants.push(person.id)
-    registerPerson(person)
+      const person = {
+        id: created.id,
+        name: created.name,
+        phone: created.phone || '',
+        email: created.email || '',
+        color: COLORS[PEOPLE.length % COLORS.length]
+      }
+      PEOPLE.push(person)
+      showToast(`"${person.name}" added`)
+      return person
+    } catch (error) {
+      console.error(error)
+      showToast('Could not save that person. Please try again.')
+      return null
+    }
+  }
+
+  document.getElementById('addPersonBtn').addEventListener('click', async () => {
+    const person = await addNewPersonFlow()
+    if (!person) return
+    if (!participants.includes(person.id)) participants.push(person.id)
     updatePeopleBar()
-    showToast(`"${person.name}" added`)
+  })
+
+  // ─────────────────────────────────────────────
+  //  MANUAL TAB — SPLIT-WITH PICKER
+  // ─────────────────────────────────────────────
+  function renderManualSplitPicker() {
+    const bar = document.getElementById('manualSplitBar')
+    bar.querySelectorAll('.person-pill').forEach(el => el.remove())
+    const addBtn = document.getElementById('manualAddPersonBtn')
+
+    PEOPLE.filter(p => p.id !== 'me').forEach(p => {
+      const active = manualSplitContacts.includes(p.id)
+      const pill = document.createElement('div')
+      pill.className = 'person-pill' + (active ? ' active' : '')
+      pill.innerHTML = `<div class="pill-dot" style="background:${p.color};"></div>${escHtml(p.name)}`
+      pill.addEventListener('click', () => {
+        manualSplitContacts = active
+          ? manualSplitContacts.filter(id => id !== p.id)
+          : [...manualSplitContacts, p.id]
+        renderManualSplitPicker()
+        manualCalc()
+      })
+      bar.insertBefore(pill, addBtn)
+    })
+  }
+
+  document.getElementById('manualAddPersonBtn').addEventListener('click', async () => {
+    const person = await addNewPersonFlow()
+    if (!person) return
+    if (!manualSplitContacts.includes(person.id)) manualSplitContacts.push(person.id)
+    renderManualSplitPicker()
+    manualCalc()
   })
 
   // ─────────────────────────────────────────────
@@ -1381,14 +1450,10 @@ table.sheet tbody td:first-child { padding-left:20px; }
   //  MANUAL CALC
   // ─────────────────────────────────────────────
   document.getElementById('m-amount').addEventListener('input', manualCalc)
-  document.getElementById('m-split').addEventListener('change', manualCalc)
   function manualCalc() {
-    const amt   = parseFloat(document.getElementById('m-amount').value) || 0
-    const split = document.getElementById('m-split').value
-    let share   = amt
-    if (split==='equal2') share = amt/2
-    if (split==='equal3') share = amt/3
-    if (split==='equal4') share = amt/4
+    const amt = parseFloat(document.getElementById('m-amount').value) || 0
+    const shareCount = manualSplitContacts.length + 1
+    const share = shareCount > 1 ? amt / shareCount : amt
     document.getElementById('m-share').value = '$' + share.toFixed(2)
     updateSubmitBar()
   }
@@ -1412,44 +1477,85 @@ table.sheet tbody td:first-child { padding-left:20px; }
   document.getElementById('m-desc').addEventListener('input', updateSubmitBar)
 
   // ─────────────────────────────────────────────
-  //  LOCAL STORAGE
+  //  SUPABASE PERSISTENCE
   // ─────────────────────────────────────────────
-  const STORAGE_KEY = 'tillerman_expenses'
-  const PEOPLE_STORAGE_KEY = 'tillerman_people'
 
-  function getStoredExpenses() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-      return Array.isArray(parsed) ? parsed : []
-    } catch (error) {
-      console.error('Could not read saved expenses:', error)
-      return []
+  // Inserts a new expense row, or updates the one being edited. Returns the
+  // expense id either way.
+  async function upsertExpense(record) {
+    if (EDITING_EXPENSE?.id) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .update(record)
+        .eq('id', EDITING_EXPENSE.id)
+        .select('id')
+        .single()
+      if (error) throw error
+      return data.id
+    }
+    const { data, error } = await supabase
+      .from('expenses')
+      .insert(record)
+      .select('id')
+      .single()
+    if (error) throw error
+    return data.id
+  }
+
+  // Line items are simplest to fully replace on every save: delete whatever
+  // is there (cascades to expense_item_assignees) then insert the current
+  // rows fresh. `me` is never stored as an assignee — absence from the
+  // assignee list already means "the owner".
+  async function replaceExpenseItems(expenseId, itemRows) {
+    const { error: delError } = await supabase.from('expense_items').delete().eq('expense_id', expenseId)
+    if (delError) throw delError
+    if (itemRows.length === 0) return
+
+    const { data: insertedItems, error: insError } = await supabase
+      .from('expense_items')
+      .insert(itemRows.map(row => ({
+        expense_id: expenseId,
+        name: row.name,
+        qty: row.qty,
+        unit_price: row.unitPrice,
+        split_type: row.splitType
+      })))
+      .select('id')
+    if (insError) throw insError
+
+    const assigneeRows = []
+    itemRows.forEach((row, index) => {
+      const itemId = insertedItems[index].id
+      row.assignees
+        .filter(pid => pid !== 'me')
+        .forEach(pid => assigneeRows.push({ item_id: itemId, contact_id: pid }))
+    })
+
+    if (assigneeRows.length > 0) {
+      const { error: assignError } = await supabase.from('expense_item_assignees').insert(assigneeRows)
+      if (assignError) throw assignError
     }
   }
 
-  function createId() {
-    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-      return window.crypto.randomUUID()
-    }
-    return 'expense-' + Date.now() + '-' + Math.random().toString(16).slice(2)
-  }
+  async function replaceExpenseSplits(expenseId, splits) {
+    const { error: delError } = await supabase.from('expense_splits').delete().eq('expense_id', expenseId)
+    if (delError) throw delError
+    if (splits.length === 0) return
 
-  function saveToLocalStorage(expense) {
-    const expenses = getStoredExpenses()
-    const existingIndex = expenses.findIndex(item => String(item.id) === String(expense.id))
-
-    if (existingIndex >= 0) {
-      expenses[existingIndex] = expense
-    } else {
-      expenses.unshift(expense)
-    }
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses))
+    const { error: insError } = await supabase.from('expense_splits').insert(
+      splits.map(split => ({
+        expense_id: expenseId,
+        contact_id: split.person_id,
+        amount_owed: split.amount_owed,
+        paid_amount: split.paid_amount || 0
+      }))
+    )
+    if (insError) throw insError
   }
 
   function buildReceiptSplits() {
     const totalsByPerson = {}
-    const previousSplits = (EDITING_EXPENSE && Array.isArray(EDITING_EXPENSE.splits)) ? EDITING_EXPENSE.splits : []
+    const previousSplits = EDITING_EXPENSE?.splitsRaw || []
 
     rows.forEach(row => {
       const rowTotal = row.qty * row.unitPrice
@@ -1467,21 +1573,8 @@ table.sheet tbody td:first-child { padding-left:20px; }
       }
 
       otherAssignees.forEach(pid => {
-        const person = getPerson(pid)
-        const key = person?.id || pid
-
-        if (!totalsByPerson[key]) {
-          totalsByPerson[key] = {
-            person_id: key,
-            owed_by_name: person?.name || pid,
-            owed_by_phone: person?.phone || '',
-            owed_by_email: person?.email || '',
-            amount_owed: 0,
-            is_paid: false
-          }
-        }
-
-        totalsByPerson[key].amount_owed += amountPerPerson
+        if (!totalsByPerson[pid]) totalsByPerson[pid] = { person_id: pid, amount_owed: 0 }
+        totalsByPerson[pid].amount_owed += amountPerPerson
       })
     })
 
@@ -1490,25 +1583,21 @@ table.sheet tbody td:first-child { padding-left:20px; }
     // not silently wipe out previously recorded payments.
     return Object.values(totalsByPerson).map(split => {
       const amount = Number(split.amount_owed.toFixed(2))
-      const prior = previousSplits.find(p => p.person_id === split.person_id)
+      const prior = previousSplits.find(p => p.contact_id === split.person_id)
       const paidAmount = prior ? Math.min(Number(prior.paid_amount || 0), amount) : 0
-
-      return {
-        ...split,
-        amount_owed: amount,
-        paid_amount: paidAmount,
-        is_paid: amount > 0 && paidAmount >= amount - 0.004
-      }
+      return { person_id: split.person_id, amount_owed: amount, paid_amount: paidAmount }
     })
   }
 
   document.getElementById('saveBtn').addEventListener('click', saveExpense)
 
-  function saveExpense() {
+  async function saveExpense() {
     const tab = activeTab()
 
     try {
-      showSaving('Saving to this device…')
+      showSaving(EDITING_EXPENSE ? 'Updating expense…' : 'Saving expense…')
+
+      let expenseId
 
       if (tab === 'receipt') {
         if (rows.length === 0) {
@@ -1519,45 +1608,25 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
         const total = rows.reduce((sum, row) => sum + row.qty * row.unitPrice, 0)
         const date = document.getElementById('purchaseDate').value || new Date().toISOString().split('T')[0]
+        const payType = document.getElementById('payMethod').value || ''
+        const last4 = document.getElementById('cardLast4').value.replace(/\D/g,'').slice(-4)
 
-        const expense = {
-          id: EDITING_EXPENSE?.id || createId(),
+        const expenseRecord = {
+          owner_id: currentUser.id,
           merchant: document.getElementById('merchantName').value.trim() || 'Unknown merchant',
           total_amount: Number(total.toFixed(2)),
           category: document.getElementById('category').value || 'Other',
-          payment_method: (() => {
-            const type = document.getElementById('payMethod').value || ''
-            const last4 = document.getElementById('cardLast4').value.replace(/\D/g,'').slice(-4)
-            return type && last4 ? `${type} •••• ${last4}` : type
-          })(),
-          card_last4: document.getElementById('cardLast4').value.replace(/\D/g,'').slice(-4),
+          payment_method: payType && last4 ? `${payType} •••• ${last4}` : payType,
+          card_last4: last4,
           expense_date: date,
           notes: document.getElementById('notes').value.trim(),
-          created_at: EDITING_EXPENSE?.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
           source: 'receipt',
-          receipt_file_name: document.getElementById('fileInput').files[0]?.name || EDITING_EXPENSE?.receipt_file_name || '',
-          items: rows.map(row => ({
-            id: row.id,
-            name: row.name,
-            qty: row.qty,
-            unitPrice: row.unitPrice,
-            assignees: [...row.assignees],
-            assigneeDetails: row.assignees.map(pid => {
-              const person = getPerson(pid)
-              return {
-                id: pid,
-                name: person?.name || (pid === 'me' ? 'Me (you)' : pid),
-                phone: person?.phone || '',
-                email: person?.email || ''
-              }
-            }),
-            splitType: row.splitType
-          })),
-          splits: buildReceiptSplits()
+          receipt_file_name: document.getElementById('fileInput').files[0]?.name || EDITING_EXPENSE?.receipt_file_name || ''
         }
 
-        saveToLocalStorage(expense)
+        expenseId = await upsertExpense(expenseRecord)
+        await replaceExpenseItems(expenseId, rows)
+        await replaceExpenseSplits(expenseId, buildReceiptSplits())
       } else {
         const desc = document.getElementById('m-desc').value.trim()
         const amt = parseFloat(document.getElementById('m-amount').value)
@@ -1574,50 +1643,45 @@ table.sheet tbody td:first-child { padding-left:20px; }
           return
         }
 
-        const splitValue = document.getElementById('m-split').value
-        const splitCount = splitValue === 'equal2' ? 2
-                         : splitValue === 'equal3' ? 3
-                         : splitValue === 'equal4' ? 4
-                         : 1
-        const owedTotal = splitCount > 1 ? amt - (amt / splitCount) : 0
+        const shareCount = manualSplitContacts.length + 1
+        const perPerson = shareCount > 1 ? amt / shareCount : 0
 
-        const expense = {
-          id: EDITING_EXPENSE?.id || createId(),
+        const expenseRecord = {
+          owner_id: currentUser.id,
           merchant: desc,
           total_amount: Number(amt.toFixed(2)),
           category: document.getElementById('m-cat').value || 'Other',
           payment_method: document.getElementById('m-card').value || '',
           expense_date: document.getElementById('m-date').value || new Date().toISOString().split('T')[0],
           notes: document.getElementById('m-notes').value.trim(),
-          created_at: EDITING_EXPENSE?.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          source: 'manual',
-          split_type: splitValue,
-          splits: owedTotal > 0 ? [{
-            owed_by_name: splitCount === 2 ? '1 other person' : `${splitCount - 1} other people`,
-            amount_owed: Number(owedTotal.toFixed(2)),
-            is_paid: false
-          }] : []
+          source: 'manual'
         }
 
-        saveToLocalStorage(expense)
+        expenseId = await upsertExpense(expenseRecord)
+        await replaceExpenseItems(expenseId, [])
+
+        const previousSplits = EDITING_EXPENSE?.splitsRaw || []
+        const splits = manualSplitContacts.map(contactId => {
+          const amount = Number(perPerson.toFixed(2))
+          const prior = previousSplits.find(p => p.contact_id === contactId)
+          const paidAmount = prior ? Math.min(Number(prior.paid_amount || 0), amount) : 0
+          return { person_id: contactId, amount_owed: amount, paid_amount: paidAmount }
+        })
+        await replaceExpenseSplits(expenseId, splits)
       }
 
       hideSaving()
-      showToast(EDITING_EXPENSE ? 'Transaction updated!' : 'Expense saved on this device!')
+      showToast(EDITING_EXPENSE ? 'Transaction updated!' : 'Expense saved!')
 
-      // After updating an existing transaction, land back on that
-      // transaction's detail page so the update is immediately visible,
-      // instead of dropping the person on the dashboard list.
+      // Land back on the transaction's own detail page so the save is
+      // immediately visible, rather than dropping the person on the list.
       setTimeout(() => {
-        window.location.href = EDITING_EXPENSE
-          ? 'transaction.html?id=' + encodeURIComponent(EDITING_EXPENSE.id)
-          : 'index.html'
+        window.location.href = 'transaction.html?id=' + encodeURIComponent(expenseId)
       }, 650)
     } catch (error) {
       console.error(error)
       hideSaving()
-      showToast('Could not save the expense on this device.')
+      showToast('Could not save the expense. Please try again.')
     }
   }
 
@@ -1636,112 +1700,89 @@ table.sheet tbody td:first-child { padding-left:20px; }
     return { type, last4 }
   }
 
-  function addEditingPerson(person) {
-    if (!person || !person.id || person.id === 'me') return
-    registerPerson(person)
-
-    const existing = PEOPLE.find(item => item.id === person.id)
-    if (!existing) {
+  // Makes sure a contact referenced by an expense being edited is present
+  // in PEOPLE/participants even if it wasn't loaded from `loadContacts()`
+  // (e.g. it was added by a different session).
+  function ensureContactOnPage(contactId) {
+    if (!contactId) return
+    if (!PEOPLE.some(p => String(p.id) === String(contactId))) {
+      const contact = contactsCache.find(c => String(c.id) === String(contactId))
       PEOPLE.push({
-        id: person.id,
-        name: person.name || 'Unnamed person',
-        phone: person.phone || '',
-        email: person.email || '',
+        id: contactId,
+        name: contact?.name || 'Unnamed person',
+        phone: contact?.phone || '',
+        email: contact?.email || '',
         color: COLORS[PEOPLE.length % COLORS.length]
       })
     }
-
-    if (!participants.includes(person.id)) participants.push(person.id)
+    if (!participants.includes(contactId)) participants.push(contactId)
   }
 
-  function rebuildPeopleForExistingExpense(expense) {
-    const knownByName = new Map()
-
-    ;(expense.splits || []).forEach((split, index) => {
-      const id = split.person_id || `edit-person-${index + 1}`
-      const person = {
-        id,
-        name: split.owed_by_name || split.name || `Person ${index + 1}`,
-        phone: split.owed_by_phone || split.phone || '',
-        email: split.owed_by_email || split.email || ''
-      }
-      addEditingPerson(person)
-      knownByName.set(person.name, person)
-    })
-
-    ;(expense.items || []).forEach(item => {
-      ;(item.assigneeDetails || []).forEach(detail => addEditingPerson(detail))
-    })
-
-    return knownByName
-  }
-
-  function normalizeExistingRows(expense) {
-    const knownByName = rebuildPeopleForExistingExpense(expense)
-    const fallbackPeople = PEOPLE.filter(person => person.id !== 'me')
-    let fallbackIndex = 0
-
-    return (expense.items || []).map((item, index) => {
-      let assignees = Array.isArray(item.assignees) ? [...item.assignees] : []
-
-      if (Array.isArray(item.assigneeDetails) && item.assigneeDetails.length) {
-        assignees = item.assigneeDetails.map(detail => {
-          addEditingPerson(detail)
-          return detail.id
-        })
-      } else {
-        assignees = assignees.map(pid => {
-          if (pid === 'me') return 'me'
-          if (getPerson(pid)) return pid
-
-          const fallback = fallbackPeople[fallbackIndex % Math.max(fallbackPeople.length, 1)]
-          fallbackIndex += 1
-          return fallback?.id || pid
-        })
-      }
-
-      return {
-        id: item.id || Date.now() + index,
-        name: item.name || item.item_name || 'Unnamed item',
-        qty: Number(item.qty ?? item.quantity ?? 1),
-        unitPrice: Number(item.unitPrice ?? item.unit_price ?? 0),
-        assignees,
-        splitType: item.splitType || item.split_type || 'mine'
-      }
-    })
-  }
-
-  function loadExistingExpenseForEdit() {
+  async function loadExistingExpenseForEdit() {
     if (!EDIT_ID) return
 
-    const expense = getStoredExpenses().find(item => String(item.id) === String(EDIT_ID))
-    if (!expense) {
+    const { data: expense, error } = await supabase
+      .from('expenses')
+      .select('*, expense_items(*, expense_item_assignees(contact_id)), expense_splits(*)')
+      .eq('id', EDIT_ID)
+      .single()
+
+    if (error || !expense) {
+      console.error(error)
       showToast('The selected transaction could not be found.')
       return
     }
 
-    EDITING_EXPENSE = expense
+    EDITING_EXPENSE = { ...expense, splitsRaw: expense.expense_splits || [] }
     document.title = 'Tillerman — Edit Transaction'
     document.querySelector('.page-title').innerHTML = 'Edit <em>transaction</em>'
     document.querySelector('.page-sub').textContent = 'Review and update the saved transaction'
     document.getElementById('saveBtn').textContent = 'Update Transaction →'
 
-    if (expense.source === 'manual' || !Array.isArray(expense.items) || expense.items.length === 0) {
+    const contactIds = new Set()
+    ;(expense.expense_items || []).forEach(item => {
+      ;(item.expense_item_assignees || []).forEach(a => { if (a.contact_id) contactIds.add(a.contact_id) })
+    })
+    ;(expense.expense_splits || []).forEach(split => { if (split.contact_id) contactIds.add(split.contact_id) })
+    contactIds.forEach(ensureContactOnPage)
+
+    const items = expense.expense_items || []
+
+    if (expense.source === 'manual' || items.length === 0) {
       switchTab('manual')
-      document.getElementById('m-desc').value = expense.merchant || expense.description || ''
-      document.getElementById('m-amount').value = Number(expense.total_amount || expense.amount || 0).toFixed(2)
+      document.getElementById('m-desc').value = expense.merchant || ''
+      document.getElementById('m-amount').value = Number(expense.total_amount || 0).toFixed(2)
       document.getElementById('m-date').value = expense.expense_date || ''
       document.getElementById('m-cat').value = expense.category || ''
       document.getElementById('m-card').value = expense.payment_method || ''
-      document.getElementById('m-split').value = expense.split_type || 'mine'
       document.getElementById('m-notes').value = expense.notes || ''
+      manualSplitContacts = (expense.expense_splits || []).map(s => s.contact_id).filter(Boolean)
+      renderManualSplitPicker()
       manualCalc()
+      updatePeopleBar()
       updateSubmitBar()
       return
     }
 
     switchTab('receipt')
-    rows = normalizeExistingRows(expense)
+    // Note: only which OTHER people are on an item is stored — whether the
+    // owner ("me") was also part of a "split" is not persisted separately,
+    // so on reload a split item is assumed to include the owner.
+    rows = items.map(item => {
+      const contactIds = (item.expense_item_assignees || []).map(a => a.contact_id).filter(Boolean)
+      const splitType = item.split_type || 'mine'
+      const assignees = splitType === 'theirs' ? contactIds
+        : splitType === 'split' ? ['me', ...contactIds]
+        : ['me']
+      return {
+        id: item.id,
+        name: item.name,
+        qty: Number(item.qty),
+        unitPrice: Number(item.unit_price),
+        assignees,
+        splitType
+      }
+    })
 
     document.getElementById('step1-section').style.display = 'none'
     document.getElementById('step2-section').style.display = 'block'
@@ -1776,13 +1817,20 @@ table.sheet tbody td:first-child { padding-left:20px; }
   // ─────────────────────────────────────────────
   //  INIT
   // ─────────────────────────────────────────────
-  document.getElementById('cardLast4').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g,'').slice(0,4) })
-  document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0]
-  document.getElementById('m-date').value       = new Date().toISOString().split('T')[0]
-  loadDirectoryPeopleIntoPage()
-  updatePeopleBar()
-  updateSubmitBar()
-  loadExistingExpenseForEdit()
+  async function init() {
+    document.getElementById('cardLast4').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g,'').slice(0,4) })
+    document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0]
+    document.getElementById('m-date').value       = new Date().toISOString().split('T')[0]
+
+    await loadContacts()
+    loadContactsIntoPage()
+    updatePeopleBar()
+    renderManualSplitPicker()
+    updateSubmitBar()
+    await loadExistingExpenseForEdit()
+  }
+
+  init()
 </script>
 </body>
 </html>
