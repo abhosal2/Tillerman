@@ -94,6 +94,16 @@ nav{height:56px;padding:0 28px;display:flex;align-items:center;justify-content:s
   nav{padding:0 16px}.shell{padding:24px 16px 50px}.grid{grid-template-columns:1fr}.header{flex-direction:column}.amount{text-align:left}.detail-grid{grid-template-columns:1fr}.item-row{grid-template-columns:minmax(0,1fr) 70px}.assignment{grid-column:1/-1;text-align:left}
 }
 </style>
+<!-- ── SUPABASE SDK ── -->
+<script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+  }
+}
+</script>
+<script type="module" src="supabase.js"></script>
+<!-- ─────────────────────────── -->
 </head>
 <body>
 <nav>
@@ -107,8 +117,15 @@ nav{height:56px;padding:0 28px;display:flex;align-items:center;justify-content:s
 
 <div class="toast" id="toast"></div>
 
-<script>
-const STORAGE_KEY = 'tillerman_expenses'
+<script type="module">
+import { supabase } from './supabase.js'
+
+// ── SESSION GUARD ──
+const { data: { session } } = await supabase.auth.getSession()
+if (!session) {
+  window.location.href = 'login.html'
+  throw new Error('Redirecting to login')
+}
 
 function esc(value=''){
   return String(value)
@@ -121,225 +138,225 @@ function money(value){
   return '$' + Number(value || 0).toFixed(2)
 }
 
-function getExpenses(){
-  try{
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    return Array.isArray(data) ? data : []
-  }catch(error){
-    console.error(error)
-    return []
-  }
-}
-
 function getId(){
   return new URLSearchParams(window.location.search).get('id')
 }
 
-function getInitial(name=''){
-  const cleaned = String(name).trim()
-  return cleaned ? cleaned.charAt(0).toUpperCase() : '?'
+// Fetch the single expense with its items/assignees/splits, joined the same
+// way as index.html and expenses.html.
+async function fetchExpense(id){
+  const { data, error } = await supabase
+    .from('expenses')
+    .select(`
+      id, merchant, total_amount, category, payment_method, card_last4,
+      expense_date, created_at, notes, source, receipt_file_name,
+      expense_items ( id, name, qty, unit_price, split_type, expense_item_assignees ( contact_id ) ),
+      expense_splits ( id, contact_id, amount_owed, paid_amount, contacts ( name, phone, email ) )
+    `)
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Could not load transaction:', error)
+    return null
+  }
+  return data
 }
 
-function getAssignmentLabel(item, personMap){
-  const assignees = Array.isArray(item.assignees) ? item.assignees : []
-  const details = Array.isArray(item.assigneeDetails) ? item.assigneeDetails : []
-  const splitType = item.splitType || item.split_type || 'mine'
+function normalizeExpense(raw){
+  const items = (raw.expense_items || []).map(item => ({
+    id: item.id,
+    name: item.name,
+    qty: Number(item.qty),
+    unitPrice: Number(item.unit_price),
+    splitType: item.split_type || 'mine',
+    contactIds: (item.expense_item_assignees || []).map(a => a.contact_id).filter(Boolean)
+  }))
+  const splits = (raw.expense_splits || []).map(split => ({
+    id: split.id,
+    contact_id: split.contact_id,
+    amount_owed: Number(split.amount_owed),
+    paid_amount: Number(split.paid_amount || 0),
+    name: split.contacts?.name || 'Unnamed person',
+    phone: split.contacts?.phone || '',
+    email: split.contacts?.email || ''
+  }))
+  return {
+    id: raw.id,
+    merchant: raw.merchant,
+    total_amount: Number(raw.total_amount || 0),
+    category: raw.category,
+    payment_method: raw.payment_method,
+    card_last4: raw.card_last4,
+    expense_date: raw.expense_date,
+    created_at: raw.created_at,
+    notes: raw.notes,
+    items,
+    splits
+  }
+}
 
-  if(splitType === 'mine') return 'You'
+function splitRemaining(split){
+  return Math.max(0, Number(split.amount_owed || 0) - Number(split.paid_amount || 0))
+}
 
-  const labels = assignees.map(id => {
-    if(id === 'me') return 'You'
+function getAssignmentLabel(item, contactNameById){
+  if(item.splitType === 'mine') return 'You'
 
-    const detail = details.find(person => String(person.id) === String(id))
-    const name = detail?.name || personMap[id] || ''
-
-    return name ? getInitial(name) : '?'
+  const labels = item.contactIds.map(contactId => {
+    const name = contactNameById[contactId] || ''
+    return name ? name.trim().charAt(0).toUpperCase() : '?'
   })
-
+  // "theirs" and "split" items both may include the owner implicitly for
+  // "split"; there's no separate "me" marker in contactIds, so show "You +"
+  // for split items to reflect that the owner shares in it too.
   const unique = [...new Set(labels.filter(Boolean))]
+  const prefix = item.splitType === 'split' ? ['You'] : []
+  const combined = [...prefix, ...unique]
 
-  if(unique.length === 0){
-    return splitType === 'theirs' ? 'Other person' : 'Split'
+  if(combined.length === 0){
+    return item.splitType === 'theirs' ? 'Other person' : 'Split'
   }
-
-  return unique.join(', ')
+  return combined.join(', ')
 }
 
-  // Copies only the selected person's allocated items, across the requested expenses.
-  function personKeyForBill(split) {
-    if (split.person_id) return 'id:' + String(split.person_id)
-    const email = String(split.owed_by_email || split.email || '').trim().toLowerCase()
-    if (email) return 'email:' + email
-    const phone = String(split.owed_by_phone || split.phone || '').replace(/\D/g, '').slice(-10)
-    if (phone) return 'phone:' + phone
-    return 'name:' + String(split.owed_by_name || split.name || 'Unnamed person').trim().toLowerCase().replace(/\s+/g, ' ')
-  }
+// ─────────────────────────────────────────────
+//  ITEMIZED BILL TEXT (mirrors index.html / expenses.html)
+// ─────────────────────────────────────────────
+function personItemAmount(item, contactId){
+  if (!item.contactIds.includes(contactId)) return null
+  if (item.splitType === 'mine') return null
 
-  function personItemAmount(item, split) {
-    const assignees = Array.isArray(item.assignees) ? item.assignees : []
-    const details = Array.isArray(item.assigneeDetails) ? item.assigneeDetails : []
-    const splitId = String(split.person_id || '')
-    const targetName = String(split.owed_by_name || split.name || '').trim().toLowerCase()
-    const matches = id => {
-      if (splitId && String(id) === splitId) return true
-      const person = details.find(p => String(p.id) === String(id))
-      return !!person && !!targetName && String(person.name || '').trim().toLowerCase() === targetName
-    }
-    if (!assignees.some(matches)) return null
-    const type = item.splitType || item.split_type || 'mine'
-    if (type === 'mine') return null
-    const qty = Number(item.qty ?? item.quantity ?? 1)
-    const unit = Number(item.unitPrice ?? item.unit_price ?? 0)
-    const total = qty * unit
-    const count = type === 'theirs' ? assignees.filter(id => id !== 'me').length : assignees.length
-    if (!Number.isFinite(total) || count < 1) return null
-    return { name: item.name || item.item_name || 'Unnamed item', qty, amount: total / count, shared: count > 1 }
-  }
+  const total = item.qty * item.unitPrice
+  const count = item.splitType === 'theirs' ? item.contactIds.length : item.contactIds.length + 1
+  if (!Number.isFinite(total) || count < 1) return null
 
-  function buildPersonBill(personKey, onlyExpenseId = null) {
-    const expenses = getExpenses()
-    const lines = []
-    let totalDue = 0, name = '', found = false
-    for (const expense of expenses) {
-      if (onlyExpenseId !== null && String(expense.id) !== String(onlyExpenseId)) continue
-      const splits = Array.isArray(expense.splits) ? expense.splits : []
-      const matching = splits.filter(s => personKeyForBill(s) === personKey && !s.is_paid &&
-        Math.max(0, Number(s.amount_owed ?? s.amount ?? 0) - Number(s.paid_amount || 0)) > 0.004)
-      if (!matching.length) continue
-      found = true
-      const merchant = expense.merchant || expense.description || 'Expense'
-      const dateValue = expense.expense_date || expense.created_at
-      const date = dateValue ? new Date(dateValue) : null
-      const dateText = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''
-      lines.push('', `${merchant}${dateText ? ' — ' + dateText : ''}`)
-      const items = Array.isArray(expense.items) ? expense.items : []
-      for (const split of matching) {
-        name ||= split.owed_by_name || split.name || 'Friend'
-        const due = Math.max(0, Number(split.amount_owed ?? split.amount ?? 0) - Number(split.paid_amount || 0))
-        totalDue += due
-        const assigned = items.map(item => personItemAmount(item, split)).filter(Boolean)
-        if (assigned.length) {
-          for (const item of assigned) lines.push(`• ${item.name}${item.qty !== 1 ? ' (qty ' + item.qty + ')' : ''}${item.shared ? ' (your share)' : ''}: $${item.amount.toFixed(2)}`)
-        } else {
-          lines.push('• Your allocated charge (item details unavailable)')
-        }
-        if (Number(split.paid_amount || 0) > 0) lines.push(`  Already paid: $${Number(split.paid_amount).toFixed(2)}`)
-        lines.push(`  Remaining for this expense: $${due.toFixed(2)}`)
+  return { name: item.name, qty: item.qty, amount: total / count, shared: count > 1 }
+}
+
+function buildPersonBill(expense, contactId){
+  const matching = expense.splits.filter(s => s.contact_id === contactId && splitRemaining(s) > 0.004)
+  if (!matching.length) return null
+
+  const lines = []
+  let totalDue = 0, name = ''
+  const dateValue = expense.expense_date || expense.created_at
+  const date = dateValue ? new Date(dateValue) : null
+  const dateText = date && !Number.isNaN(date.getTime())
+    ? date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''
+  lines.push('', `${expense.merchant || 'Expense'}${dateText ? ' — ' + dateText : ''}`)
+
+  for (const split of matching) {
+    name ||= split.name
+    const due = splitRemaining(split)
+    totalDue += due
+
+    const assigned = expense.items.map(item => personItemAmount(item, contactId)).filter(Boolean)
+    if (assigned.length) {
+      for (const item of assigned) {
+        lines.push(`• ${item.name}${item.qty !== 1 ? ' (qty ' + item.qty + ')' : ''}${item.shared ? ' (your share)' : ''}: $${item.amount.toFixed(2)}`)
       }
+    } else {
+      lines.push('• Your allocated charge (item details unavailable)')
     }
-    if (!found) return null
-    return `Hi ${name}, here is your itemized bill from Tillerman:` + lines.join('\n') + `\n\nTOTAL STILL OWED: $${totalDue.toFixed(2)}`
+    if (split.paid_amount > 0) lines.push(`  Already paid: $${split.paid_amount.toFixed(2)}`)
+    lines.push(`  Remaining for this expense: $${due.toFixed(2)}`)
   }
 
-  async function copyPersonBill(personKey, expenseId, button) {
-    const message = buildPersonBill(personKey, expenseId)
-    if (!message) { alert('No unpaid charges found for this person.'); return }
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(message)
-      } else {
-        const input = document.createElement('textarea')
-        input.value = message
-        input.style.cssText = 'position:fixed;left:-9999px;top:0'
-        document.body.appendChild(input)
-        input.focus(); input.select()
-        const copied = document.execCommand('copy')
-        input.remove()
-        if (!copied) throw new Error('Clipboard unavailable')
-      }
-      const original = button.textContent
-      button.textContent = '✓ Copied!'
-      setTimeout(() => { if (button.isConnected) button.textContent = original }, 2200)
-    } catch (error) {
-      console.error('Could not copy bill:', error)
-      // Keep the bill available even if browser clipboard permission is denied.
-      window.prompt('Copy this itemized bill:', message)
-    }
-  }
+  return `Hi ${name}, here is your itemized bill from Tillerman:` + lines.join('\n') + `\n\nTOTAL STILL OWED: $${totalDue.toFixed(2)}`
+}
 
-function render(){
+async function copyPersonBill(expense, contactId, button) {
+  const message = buildPersonBill(expense, contactId)
+  if (!message) { alert('No outstanding charges found for this person.'); return }
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(message)
+    } else {
+      const input = document.createElement('textarea')
+      input.value = message
+      input.style.cssText = 'position:fixed;left:-9999px;top:0'
+      document.body.appendChild(input)
+      input.focus(); input.select()
+      const copied = document.execCommand('copy')
+      input.remove()
+      if (!copied) throw new Error('Clipboard unavailable')
+    }
+    const original = button.textContent
+    button.textContent = '✓ Copied!'
+    setTimeout(() => { if (button.isConnected) button.textContent = original }, 2200)
+  } catch (error) {
+    console.error('Could not copy bill:', error)
+    window.prompt('Copy this itemized bill:', message)
+  }
+}
+
+let currentExpense = null
+
+async function render(){
   const id = getId()
-  const expense = getExpenses().find(item => String(item.id) === String(id))
   const page = document.getElementById('page')
+  const raw = id ? await fetchExpense(id) : null
 
-  if(!expense){
+  if(!raw){
     page.innerHTML = `
       <div class="panel">
-        <div class="empty">This transaction could not be found in this browser.</div>
+        <div class="empty">This transaction could not be found.</div>
       </div>
       <div class="actions"><a class="btn accent" href="index.html">Return to dashboard</a></div>`
     return
   }
 
-  const amount = Number(expense.total_amount || expense.amount || 0)
-  const splits = Array.isArray(expense.splits) ? expense.splits : []
-  const unpaid = splits.filter(split => !split.is_paid)
-  const owed = unpaid.reduce((sum, split) => sum + Number(split.amount_owed || split.amount || 0), 0)
+  const expense = normalizeExpense(raw)
+  currentExpense = expense
+
+  const amount = expense.total_amount
+  const unpaid = expense.splits.filter(split => splitRemaining(split) > 0.004)
+  const owed = unpaid.reduce((sum, split) => sum + splitRemaining(split), 0)
   const yourShare = Math.max(0, amount - owed)
-  const items = Array.isArray(expense.items) ? expense.items : []
+  const items = expense.items
 
-  const byPerson = {}
-  unpaid.forEach(split => {
-    const name = split.owed_by_name || split.name || 'Unnamed person'
-    if(!byPerson[name]) byPerson[name] = {amount:0, phone:split.owed_by_phone || split.phone || '', count:0}
-    byPerson[name].amount += Number(split.amount_owed || split.amount || 0)
-    byPerson[name].count += 1
-  })
+  const contactNameById = {}
+  expense.splits.forEach(split => { contactNameById[split.contact_id] = split.name })
 
-  const personMap = {}
-
-  splits.forEach(split => {
-    const id = split.person_id
-    const name = split.owed_by_name || split.name || ''
-    if(id && name) personMap[id] = name
-  })
-
-  items.forEach(item => {
-    ;(item.assigneeDetails || []).forEach(person => {
-      if(person?.id && person?.name) personMap[person.id] = person.name
-    })
-  })
-
-  const people = Object.entries(byPerson).sort((a,b) => b[1].amount - a[1].amount)
-  const maxPerson = Math.max(...people.map(([,info]) => info.amount), 1)
+  const maxPerson = Math.max(...unpaid.map(s => splitRemaining(s)), 1)
   const date = new Date(expense.expense_date || expense.created_at || Date.now())
     .toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})
-  const payment = expense.payment_method || expense.card_type || 'Not specified'
-  const last4 = expense.card_last4 || expense.last4 || ''
+  const payment = expense.payment_method || 'Not specified'
+  const last4 = expense.card_last4 || ''
   const paymentDisplay = last4 ? `${payment} •••• ${esc(last4)}` : esc(payment)
-  const merchant = expense.merchant || expense.description || 'Unnamed expense'
+  const merchant = expense.merchant || 'Unnamed expense'
   const statusText = owed > 0 ? `${unpaid.length} pending balance${unpaid.length===1?'':'s'}` : 'No outstanding balance'
 
   const itemHtml = items.length ? items.map(item => {
-    const qty = Number(item.qty || item.quantity || 1)
-    const unit = Number(item.unitPrice ?? item.unit_price ?? 0)
-    const total = qty * unit
+    const total = item.qty * item.unitPrice
     return `
       <div class="item-row">
         <div>
-          <div class="item-name">${esc(item.name || item.item_name || 'Unnamed item')}</div>
-          <div class="item-meta">Qty ${qty} · ${money(unit)} each</div>
+          <div class="item-name">${esc(item.name || 'Unnamed item')}</div>
+          <div class="item-meta">Qty ${item.qty} · ${money(item.unitPrice)} each</div>
         </div>
         <div class="item-price">${money(total)}</div>
-        <div class="assignment">${esc(getAssignmentLabel(item, personMap))}</div>
+        <div class="assignment">${esc(getAssignmentLabel(item, contactNameById))}</div>
       </div>`
   }).join('') : `<div class="empty">This expense does not contain item-level details.</div>`
 
-  const peopleHtml = people.length ? people.map(([name,info]) => {
-    const initials = name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0,2)
-    const width = Math.max(6, Math.round(info.amount / maxPerson * 100))
+  const peopleHtml = unpaid.length ? unpaid.map(split => {
+    const initials = split.name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0,2)
+    const remaining = splitRemaining(split)
+    const width = Math.max(6, Math.round(remaining / maxPerson * 100))
     return `
       <div class="person-row">
         <div class="person-top">
           <div class="avatar">${esc(initials || '?')}</div>
           <div class="person-info">
-            <div class="person-name">${esc(name)}</div>
-            <div class="person-detail">${info.phone ? esc(info.phone) : 'No phone saved'} · ${info.count} unpaid allocation${info.count===1?'':'s'}</div>
+            <div class="person-name">${esc(split.name)}</div>
+            <div class="person-detail">${split.phone ? esc(split.phone) : 'No phone saved'}</div>
           </div>
-          <div class="person-amount">${money(info.amount)}</div>
+          <div class="person-amount">${money(remaining)}</div>
         </div>
         <div class="track"><div class="fill" style="width:${width}%"></div></div>
-        <button class="send-btn" type="button" data-send-person="${esc(name)}">Send to ${esc(name.split(' ')[0] || name)} · Copy bill</button>
+        <button class="send-btn" type="button" data-send-contact="${esc(split.contact_id)}">Send to ${esc(split.name.split(' ')[0] || split.name)} · Copy bill</button>
       </div>`
   }).join('') : `<div class="empty">This was saved as a personal expense.</div>`
 
@@ -384,7 +401,7 @@ function render(){
         <section class="panel">
           <div class="panel-head">
             <div class="panel-title">Who owes you</div>
-            <div class="panel-sub">${people.length} person${people.length===1?'':'s'}</div>
+            <div class="panel-sub">${unpaid.length} person${unpaid.length===1?'':'s'}</div>
           </div>
           ${peopleHtml}
         </section>
@@ -408,14 +425,9 @@ function render(){
 }
 
 document.getElementById('page').addEventListener('click', event => {
-  const button = event.target.closest('[data-send-person]')
-  if (!button) return
-  const expense = getExpenses().find(e => String(e.id) === String(getId()))
-  if (!expense) return
-  const split = (expense.splits || []).find(s =>
-    String(s.owed_by_name || s.name || 'Unnamed person') === button.dataset.sendPerson && !s.is_paid)
-  if (!split) { alert('No outstanding charges found for this person.'); return }
-  copyPersonBill(personKeyForBill(split), expense.id, button)
+  const button = event.target.closest('[data-send-contact]')
+  if (!button || !currentExpense) return
+  copyPersonBill(currentExpense, button.dataset.sendContact, button)
 })
 
 render()

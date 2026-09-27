@@ -8,7 +8,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
-
+<!-- ── SUPABASE SDK ── -->
+<script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+  }
+}
+</script>
+<script type="module" src="supabase.js"></script>
+<!-- ─────────────────────────── -->
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -205,7 +214,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 
   <div class="security-bar">
     <div class="sec-dot"></div>
-    <span>Local prototype — data is stored only in this browser for now.</span>
+    <span>Synced to your Supabase account.</span>
   </div>
 
   <div class="stat-strip">
@@ -298,12 +307,19 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   </div>
 </div>
 
-<!-- ── PAGE LOGIC ── -->
-<script>
-  // Expenses are read from localStorage so the interface remains functional
-  // while the backend is rebuilt from scratch.
+<!-- ── PAGE LOGIC (Supabase-backed) ── -->
+<script type="module">
+  import { supabase } from './supabase.js'
 
-  const STORAGE_KEY = 'tillerman_expenses'
+  // ── SESSION GUARD ──
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    window.location.href = 'login.html'
+    throw new Error('Redirecting to login')
+  }
+  const currentUser = session.user
+  document.querySelector('.nav-user span').textContent = currentUser.email
+  document.querySelector('.nav-avatar').textContent = currentUser.email.slice(0, 2).toUpperCase()
 
   // ─────────────────────────────────────────────
   //  TIME OF DAY GREETING
@@ -318,63 +334,87 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   document.getElementById('footMonth').textContent = monthName
 
   // ─────────────────────────────────────────────
-  //  LOCAL DATA HELPERS
+  //  STATE + DATA SHAPING
   // ─────────────────────────────────────────────
-  function getExpenses() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-      return Array.isArray(saved) ? saved : []
-    } catch (error) {
-      console.error('Could not read local expenses:', error)
-      return []
-    }
-  }
+  let cachedExpenses = []
 
-  function saveExpenses(expenses) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses))
-      return true
-    } catch (error) {
-      console.error('Could not save local expenses:', error)
-      return false
+  function normalizeExpense(raw) {
+    const items = (raw.expense_items || []).map(item => ({
+      id: item.id,
+      name: item.name,
+      qty: Number(item.qty),
+      unitPrice: Number(item.unit_price),
+      splitType: item.split_type || 'mine',
+      contactIds: (item.expense_item_assignees || []).map(a => a.contact_id).filter(Boolean)
+    }))
+    const splits = (raw.expense_splits || []).map(split => ({
+      id: split.id,
+      contact_id: split.contact_id,
+      amount_owed: Number(split.amount_owed),
+      paid_amount: Number(split.paid_amount || 0),
+      name: split.contacts?.name || 'Unnamed person',
+      phone: split.contacts?.phone || '',
+      email: split.contacts?.email || ''
+    }))
+    return {
+      id: raw.id,
+      merchant: raw.merchant,
+      total_amount: Number(raw.total_amount || 0),
+      category: raw.category,
+      payment_method: raw.payment_method,
+      card_last4: raw.card_last4,
+      expense_date: raw.expense_date,
+      created_at: raw.created_at,
+      notes: raw.notes,
+      source: raw.source,
+      receipt_file_name: raw.receipt_file_name,
+      items,
+      splits
     }
   }
 
   function getAllSplits(expenses) {
-    return expenses.flatMap(expense =>
-      Array.isArray(expense.splits)
-        ? expense.splits.map(split => ({ ...split, expense_id: expense.id }))
-        : []
-    )
+    return expenses.flatMap(expense => expense.splits.map(split => ({ ...split, expense_id: expense.id })))
   }
 
-  // A split can now be partially paid via `paid_amount`. Remaining balance
-  // is what's still owed after subtracting anything already settled.
+  // A split can be partially paid via `paid_amount`. Remaining balance is
+  // what's still owed after subtracting anything already settled.
   function splitRemaining(split) {
-    const total = Number(split.amount_owed || split.amount || 0)
-    const paid = Number(split.paid_amount || 0)
-    return Math.max(0, total - paid)
+    return Math.max(0, Number(split.amount_owed || 0) - Number(split.paid_amount || 0))
   }
 
   // ─────────────────────────────────────────────
   //  LOAD DASHBOARD DATA
   // ─────────────────────────────────────────────
-  function loadDashboard() {
-    const expenses = getExpenses().sort((a, b) => {
-      const aDate = new Date(a.created_at || a.expense_date || 0)
-      const bDate = new Date(b.created_at || b.expense_date || 0)
-      return bDate - aDate
-    })
-    const splits = getAllSplits(expenses)
+  async function loadDashboard() {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select(`
+        id, merchant, total_amount, category, payment_method, card_last4,
+        expense_date, created_at, notes, source, receipt_file_name,
+        expense_items ( id, name, qty, unit_price, split_type, expense_item_assignees ( contact_id ) ),
+        expense_splits ( id, contact_id, amount_owed, paid_amount, contacts ( name, phone, email ) )
+      `)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Could not load expenses:', error)
+      document.getElementById('txnContainer').innerHTML =
+        '<div class="empty-state"><div class="empty-sub">Could not load your expenses. Please refresh.</div></div>'
+      return
+    }
+
+    cachedExpenses = (data || []).map(normalizeExpense)
+    const splits = getAllSplits(cachedExpenses)
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    renderStats(expenses, splits, startOfMonth)
-    renderTransactions(expenses, splits)
+    renderStats(cachedExpenses, splits, startOfMonth)
+    renderTransactions(cachedExpenses)
     renderOwed(splits)
-    renderCategories(expenses, startOfMonth)
+    renderCategories(cachedExpenses, startOfMonth)
 
     document.getElementById('subgreet').textContent =
-      (expenses.length ? `${expenses.length} expenses saved locally` : 'No expenses logged yet') +
+      (cachedExpenses.length ? `${cachedExpenses.length} expenses saved` : 'No expenses logged yet') +
       ' · ' + monthName
   }
 
@@ -384,14 +424,12 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 
   function renderStats(expenses, splits, startOfMonth) {
     const thisMonth = expenses.filter(expense => expenseDate(expense) >= startOfMonth)
-    const totalThisMonth = thisMonth.reduce((sum, expense) =>
-      sum + Number(expense.total_amount || expense.amount || 0), 0)
+    const totalThisMonth = thisMonth.reduce((sum, expense) => sum + expense.total_amount, 0)
 
     const unpaidSplits = splits.filter(split => splitRemaining(split) > 0.004)
     const owedTotal = unpaidSplits.reduce((sum, split) => sum + splitRemaining(split), 0)
 
-    const allTotal = expenses.reduce((sum, expense) =>
-      sum + Number(expense.total_amount || expense.amount || 0), 0)
+    const allTotal = expenses.reduce((sum, expense) => sum + expense.total_amount, 0)
     const allOwedRemaining = splits.reduce((sum, split) => sum + splitRemaining(split), 0)
 
     document.getElementById('statTotal').textContent = '$' + totalThisMonth.toFixed(2)
@@ -404,7 +442,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     document.getElementById('statCount').textContent = expenses.length
   }
 
-  function renderTransactions(expenses, splits) {
+  function renderTransactions(expenses) {
     const container = document.getElementById('txnContainer')
 
     if (expenses.length === 0) {
@@ -425,17 +463,14 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
 
     let html = '<div class="txn-list">'
     expenses.slice(0, 8).forEach(expense => {
-      const itemSplits = splits.filter(split => split.expense_id === expense.id)
-      const hasUnpaid = itemSplits.some(split => splitRemaining(split) > 0.004)
+      const hasUnpaid = expense.splits.some(split => splitRemaining(split) > 0.004)
       const badge = hasUnpaid
         ? '<span class="txn-badge badge-pending">split pending</span>'
-        : itemSplits.length
+        : expense.splits.length
           ? '<span class="txn-badge badge-paid">✓ all paid</span>'
           : '<span class="txn-badge badge-personal">personal</span>'
 
       const date = expenseDate(expense).toLocaleDateString('en-US', { month:'short', day:'numeric' })
-      const amount = Number(expense.total_amount || expense.amount || 0)
-
       const detailsUrl = 'transaction.html?id=' + encodeURIComponent(expense.id)
 
       html += `
@@ -443,11 +478,11 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
           <div class="txn-main">
             <div class="txn-icon">${icons[expense.category] || '💳'}</div>
             <div class="txn-info">
-              <div class="txn-name">${escHtml(expense.merchant || expense.description || 'Unnamed expense')}</div>
+              <div class="txn-name">${escHtml(expense.merchant || 'Unnamed expense')}</div>
               <div class="txn-meta">${date}${expense.payment_method ? ' · ' + escHtml(expense.payment_method) : ''}</div>
             </div>
             <div class="txn-right">
-              <div class="txn-amount">$${amount.toFixed(2)}</div>
+              <div class="txn-amount">$${expense.total_amount.toFixed(2)}</div>
               ${badge}
             </div>
           </div>
@@ -457,134 +492,86 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     container.innerHTML = html + '</div>'
   }
 
-
-  function normalizePersonName(value = '') {
-    return String(value).trim().toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '')
-      .replace(/\s+/g, ' ')
-  }
-
-  function normalizePersonPhone(value = '') {
-    const digits = String(value).replace(/\D/g, '')
-    return digits.length > 10 ? digits.slice(-10) : digits
-  }
-
-  function normalizePersonEmail(value = '') {
-    return String(value).trim().toLowerCase()
-  }
-
-  function personGroupingKey(split) {
-    if (split.person_id) return 'id:' + String(split.person_id)
-
-    const email = normalizePersonEmail(split.owed_by_email || split.email || '')
-    if (email) return 'email:' + email
-
-    const phone = normalizePersonPhone(split.owed_by_phone || split.phone || '')
-    if (phone) return 'phone:' + phone
-
-    return 'name:' + normalizePersonName(
-      split.owed_by_name || split.name || 'Unnamed person'
-    )
-  }
-
-  // Shared by the "Who owes you" list and the settle modal's person picker.
+  // ─────────────────────────────────────────────
+  //  WHO OWES YOU — grouped by contact_id, a real foreign key now, so the
+  //  old fuzzy name/phone/email matching is no longer needed.
+  // ─────────────────────────────────────────────
   function computeOwedByPerson(splits) {
     const unpaid = splits.filter(split => splitRemaining(split) > 0.004)
     const byPerson = {}
 
     unpaid.forEach(split => {
-      const key = personGroupingKey(split)
-      const name = split.owed_by_name || split.name || 'Unnamed person'
-      const amount = splitRemaining(split)
-      const phone = split.owed_by_phone || split.phone || ''
-      const email = split.owed_by_email || split.email || ''
-      const expenseId = split.expense_id || ''
-
+      const key = split.contact_id
       if (!byPerson[key]) {
         byPerson[key] = {
-          key, name, amount: 0, phone, email,
-          expenseIds: new Set(), splitCount: 0
+          key, name: split.name, phone: split.phone, email: split.email,
+          amount: 0, expenseIds: new Set(), splitCount: 0
         }
       }
-
-      byPerson[key].amount += amount
+      byPerson[key].amount += splitRemaining(split)
       byPerson[key].splitCount += 1
-      if (expenseId) byPerson[key].expenseIds.add(expenseId)
-      if (!byPerson[key].phone && phone) byPerson[key].phone = phone
-      if (!byPerson[key].email && email) byPerson[key].email = email
+      byPerson[key].expenseIds.add(split.expense_id)
     })
 
     return Object.values(byPerson).sort((a, b) => b.amount - a.amount)
   }
 
-  // Copies only the selected person's allocated items, across the requested expenses.
-  function personKeyForBill(split) {
-    if (split.person_id) return 'id:' + String(split.person_id)
-    const email = String(split.owed_by_email || split.email || '').trim().toLowerCase()
-    if (email) return 'email:' + email
-    const phone = String(split.owed_by_phone || split.phone || '').replace(/\D/g, '').slice(-10)
-    if (phone) return 'phone:' + phone
-    return 'name:' + String(split.owed_by_name || split.name || 'Unnamed person').trim().toLowerCase().replace(/\s+/g, ' ')
-  }
+  // ─────────────────────────────────────────────
+  //  ITEMIZED BILL TEXT (for the "Copy bill" buttons)
+  // ─────────────────────────────────────────────
+  function personItemAmount(item, contactId) {
+    if (!item.contactIds.includes(contactId)) return null
+    if (item.splitType === 'mine') return null
 
-  function personItemAmount(item, split) {
-    const assignees = Array.isArray(item.assignees) ? item.assignees : []
-    const details = Array.isArray(item.assigneeDetails) ? item.assigneeDetails : []
-    const splitId = String(split.person_id || '')
-    const targetName = String(split.owed_by_name || split.name || '').trim().toLowerCase()
-    const matches = id => {
-      if (splitId && String(id) === splitId) return true
-      const person = details.find(p => String(p.id) === String(id))
-      return !!person && !!targetName && String(person.name || '').trim().toLowerCase() === targetName
-    }
-    if (!assignees.some(matches)) return null
-    const type = item.splitType || item.split_type || 'mine'
-    if (type === 'mine') return null
-    const qty = Number(item.qty ?? item.quantity ?? 1)
-    const unit = Number(item.unitPrice ?? item.unit_price ?? 0)
-    const total = qty * unit
-    const count = type === 'theirs' ? assignees.filter(id => id !== 'me').length : assignees.length
+    const total = item.qty * item.unitPrice
+    // "theirs" divides only among the assigned contacts; "split" is assumed
+    // to include the owner too (see expenses.html for why that isn't stored).
+    const count = item.splitType === 'theirs' ? item.contactIds.length : item.contactIds.length + 1
     if (!Number.isFinite(total) || count < 1) return null
-    return { name: item.name || item.item_name || 'Unnamed item', qty, amount: total / count, shared: count > 1 }
+
+    return { name: item.name, qty: item.qty, amount: total / count, shared: count > 1 }
   }
 
-  function buildPersonBill(personKey, onlyExpenseId = null) {
-    const expenses = getExpenses()
+  function buildPersonBill(contactId, onlyExpenseId = null) {
     const lines = []
     let totalDue = 0, name = '', found = false
-    for (const expense of expenses) {
+
+    for (const expense of cachedExpenses) {
       if (onlyExpenseId !== null && String(expense.id) !== String(onlyExpenseId)) continue
-      const splits = Array.isArray(expense.splits) ? expense.splits : []
-      const matching = splits.filter(s => personKeyForBill(s) === personKey && !s.is_paid &&
-        Math.max(0, Number(s.amount_owed ?? s.amount ?? 0) - Number(s.paid_amount || 0)) > 0.004)
+      const matching = expense.splits.filter(s => s.contact_id === contactId && splitRemaining(s) > 0.004)
       if (!matching.length) continue
+
       found = true
-      const merchant = expense.merchant || expense.description || 'Expense'
       const dateValue = expense.expense_date || expense.created_at
       const date = dateValue ? new Date(dateValue) : null
-      const dateText = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''
-      lines.push('', `${merchant}${dateText ? ' — ' + dateText : ''}`)
-      const items = Array.isArray(expense.items) ? expense.items : []
+      const dateText = date && !Number.isNaN(date.getTime())
+        ? date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''
+      lines.push('', `${expense.merchant || 'Expense'}${dateText ? ' — ' + dateText : ''}`)
+
       for (const split of matching) {
-        name ||= split.owed_by_name || split.name || 'Friend'
-        const due = Math.max(0, Number(split.amount_owed ?? split.amount ?? 0) - Number(split.paid_amount || 0))
+        name ||= split.name
+        const due = splitRemaining(split)
         totalDue += due
-        const assigned = items.map(item => personItemAmount(item, split)).filter(Boolean)
+
+        const assigned = expense.items.map(item => personItemAmount(item, contactId)).filter(Boolean)
         if (assigned.length) {
-          for (const item of assigned) lines.push(`• ${item.name}${item.qty !== 1 ? ' (qty ' + item.qty + ')' : ''}${item.shared ? ' (your share)' : ''}: $${item.amount.toFixed(2)}`)
+          for (const item of assigned) {
+            lines.push(`• ${item.name}${item.qty !== 1 ? ' (qty ' + item.qty + ')' : ''}${item.shared ? ' (your share)' : ''}: $${item.amount.toFixed(2)}`)
+          }
         } else {
           lines.push('• Your allocated charge (item details unavailable)')
         }
-        if (Number(split.paid_amount || 0) > 0) lines.push(`  Already paid: $${Number(split.paid_amount).toFixed(2)}`)
+        if (split.paid_amount > 0) lines.push(`  Already paid: $${split.paid_amount.toFixed(2)}`)
         lines.push(`  Remaining for this expense: $${due.toFixed(2)}`)
       }
     }
+
     if (!found) return null
     return `Hi ${name}, here is your itemized bill from Tillerman:` + lines.join('\n') + `\n\nTOTAL STILL OWED: $${totalDue.toFixed(2)}`
   }
 
-  async function copyPersonBill(personKey, expenseId, button) {
-    const message = buildPersonBill(personKey, expenseId)
+  async function copyPersonBill(contactId, expenseId, button) {
+    const message = buildPersonBill(contactId, expenseId)
     if (!message) { alert('No unpaid charges found for this person.'); return }
     try {
       if (navigator.clipboard && window.isSecureContext) {
@@ -672,7 +659,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     const byCategory = {}
     thisMonth.forEach(expense => {
       const category = expense.category || 'Other'
-      byCategory[category] = (byCategory[category] || 0) + Number(expense.total_amount || expense.amount || 0)
+      byCategory[category] = (byCategory[category] || 0) + expense.total_amount
     })
 
     const max = Math.max(...Object.values(byCategory))
@@ -706,8 +693,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   let settlePeopleCache = []
 
   function openSettleModal(presetKey) {
-    const splits = getAllSplits(getExpenses())
-    settlePeopleCache = computeOwedByPerson(splits)
+    settlePeopleCache = computeOwedByPerson(getAllSplits(cachedExpenses))
     if (settlePeopleCache.length === 0) return
 
     const select = document.getElementById('settlePerson')
@@ -741,7 +727,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     document.getElementById('settleModal').style.display = 'none'
   }
 
-  function confirmSettle() {
+  async function confirmSettle() {
     const select = document.getElementById('settlePerson')
     const amountInput = document.getElementById('settleAmount')
     const errorEl = document.getElementById('settleError')
@@ -755,39 +741,50 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       return
     }
 
-    settlePerson(key, amount)
+    const confirmBtn = document.getElementById('settleConfirmBtn')
+    confirmBtn.disabled = true
+    await settlePerson(key, amount)
+    confirmBtn.disabled = false
     closeSettleModal()
   }
 
-  // Applies a payment to a person's unpaid splits, oldest expense first,
-  // marking a split fully paid once its remaining balance is covered.
-  function settlePerson(personKey, amountToSettle) {
-    const expenses = getExpenses()
+  // Applies a payment to a contact's unpaid splits, oldest expense first,
+  // writing each updated paid_amount back to Supabase (is_paid is a
+  // generated column there, so it recomputes itself).
+  async function settlePerson(contactId, amountToSettle) {
     const targets = []
-
-    expenses.forEach(expense => {
-      if (!Array.isArray(expense.splits)) return
+    cachedExpenses.forEach(expense => {
       expense.splits.forEach(split => {
-        if (personGroupingKey(split) === personKey && splitRemaining(split) > 0.004) {
+        if (split.contact_id === contactId && splitRemaining(split) > 0.004) {
           targets.push({ split, date: expenseDate(expense) })
         }
       })
     })
-
     targets.sort((a, b) => a.date - b.date)
 
     let remainingToApply = amountToSettle
+    const updates = []
     for (const { split } of targets) {
       if (remainingToApply <= 0.004) break
       const remaining = splitRemaining(split)
       const apply = Math.min(remaining, remainingToApply)
-      split.paid_amount = Number((Number(split.paid_amount || 0) + apply).toFixed(2))
-      if (splitRemaining(split) <= 0.004) split.is_paid = true
+      updates.push({ id: split.id, paid_amount: Number((split.paid_amount + apply).toFixed(2)) })
       remainingToApply -= apply
     }
 
-    saveExpenses(expenses)
-    loadDashboard()
+    try {
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('expense_splits')
+          .update({ paid_amount: update.paid_amount })
+          .eq('id', update.id)
+        if (error) throw error
+      }
+      await loadDashboard()
+    } catch (error) {
+      console.error('Could not save settlement:', error)
+      alert('Could not save the settlement. Please try again.')
+    }
   }
 
   document.getElementById('openSettleBtn').addEventListener('click', () => openSettleModal())
@@ -799,7 +796,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   })
   document.getElementById('owedContainer').addEventListener('click', event => {
     const btn = event.target.closest('.owed-settle-btn')
-    if (btn) openSettleModal(btn.dataset.person)
+    if (btn && btn.dataset.person) openSettleModal(btn.dataset.person)
   })
 
   document.getElementById('refreshTip').addEventListener('click', event => {
@@ -808,7 +805,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
     document.getElementById('owedContainer').innerHTML =
       '<div class="loader-row"><div class="spin"></div> Refreshing…</div>'
-    window.setTimeout(loadDashboard, 150)
+    loadDashboard()
   })
 
   loadDashboard()
