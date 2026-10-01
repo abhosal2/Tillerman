@@ -1311,9 +1311,12 @@ table.sheet tbody td:first-child { padding-left:20px; }
     const row = rows.find(r => r.id === rowId)
     if (!row) return
 
+    // Show every saved contact, not just people already marked as a
+    // "participant" on this expense — so you can reassign an item to
+    // anyone you've added, even if they weren't on this bill before.
     const availablePeople = splitType === 'split'
-      ? PEOPLE.filter(person => person.id === 'me' || participants.includes(person.id))
-      : PEOPLE.filter(person => person.id !== 'me' && participants.includes(person.id))
+      ? PEOPLE
+      : PEOPLE.filter(person => person.id !== 'me')
 
     pendingAssignment = { rowId, splitType }
 
@@ -1328,7 +1331,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
     const list = document.getElementById('assignModalList')
 
     if (availablePeople.length === 0 || (splitType === 'split' && availablePeople.length < 2)) {
-      list.innerHTML = '<div class="assign-empty">Add at least one other person under Participants first.</div>'
+      list.innerHTML = '<div class="assign-empty">Add at least one other person using "+ Add person" above first.</div>'
       document.getElementById('assignApplyBtn').disabled = true
     } else {
       list.innerHTML = availablePeople.map(person => {
@@ -1388,7 +1391,11 @@ table.sheet tbody td:first-child { padding-left:20px; }
     row.splitType = appliedType
     row.assignees = [...selected]
 
+    // Keep the Participants bar in sync with whoever just got assigned.
+    selected.forEach(pid => { if (pid !== 'me' && !participants.includes(pid)) participants.push(pid) })
+
     closeAssignModal()
+    updatePeopleBar()
     renderSheet()
 
     showToast(
@@ -1407,7 +1414,11 @@ table.sheet tbody td:first-child { padding-left:20px; }
     const dd  = document.getElementById('personDropdown')
     const ov  = document.getElementById('dropdownOverlay')
     let html  = ''
-    PEOPLE.filter(p => participants.includes(p.id) || p.id==='me').forEach(p => {
+    // Show every saved contact here, not just people already marked as a
+    // "participant" on this particular expense — otherwise there's no way
+    // to reassign an item to someone who wasn't already on it (e.g. fixing
+    // an item that got charged to the wrong person).
+    PEOPLE.forEach(p => {
       const active = row.assignees.includes(p.id)
       html += `<div class="pd-item${active?' active':''}" data-pid="${p.id}" data-row="${rowId}">
         <span class="pd-dot" style="background:${p.color};"></span>${p.name} ${active?'✓':''}
@@ -1432,9 +1443,13 @@ table.sheet tbody td:first-child { padding-left:20px; }
           r.splitType = pid==='me' && r.assignees.length===1 ? 'mine'
                       : pid!=='me' && r.assignees.length===1 ? 'theirs'
                       : 'split'
+          // Keep the Participants bar in sync so a newly-assigned person
+          // shows up there too, not just in this item's assignment.
+          if (pid !== 'me' && !participants.includes(pid)) participants.push(pid)
         }
       }
       closeDropdown()
+      updatePeopleBar()
       renderSheet()
     }
     const rect = e.currentTarget.getBoundingClientRect()
