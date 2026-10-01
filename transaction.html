@@ -238,13 +238,12 @@ function buildPersonBill(expense, contactId){
   const matching = expense.splits.filter(s => s.contact_id === contactId && splitRemaining(s) > 0.004)
   if (!matching.length) return null
 
-  const lines = []
+  const itemLines = []
   let totalDue = 0, name = ''
   const dateValue = expense.expense_date || expense.created_at
   const date = dateValue ? new Date(dateValue) : null
   const dateText = date && !Number.isNaN(date.getTime())
     ? date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''
-  lines.push('', `${expense.merchant || 'Expense'}${dateText ? ' — ' + dateText : ''}`)
 
   for (const split of matching) {
     name ||= split.name
@@ -254,16 +253,21 @@ function buildPersonBill(expense, contactId){
     const assigned = expense.items.map(item => personItemAmount(item, contactId)).filter(Boolean)
     if (assigned.length) {
       for (const item of assigned) {
-        lines.push(`• ${item.name}${item.qty !== 1 ? ' (qty ' + item.qty + ')' : ''}${item.shared ? ' (your share)' : ''}: $${item.amount.toFixed(2)}`)
+        const qtyText = item.qty !== 1 ? ` (x${item.qty})` : ''
+        itemLines.push(`   • ${item.name}${qtyText} — $${item.amount.toFixed(2)}`)
+      }
+      if (split.paid_amount > 0) {
+        itemLines.push(`   ($${split.paid_amount.toFixed(2)} already paid — $${due.toFixed(2)} left)`)
       }
     } else {
-      lines.push('• Your allocated charge (item details unavailable)')
+      // No item-level breakdown (e.g. a manually logged expense) — show the
+      // amount owed directly instead of a separate "remaining" line.
+      itemLines.push(`   • $${due.toFixed(2)}${split.paid_amount > 0 ? ` (after $${split.paid_amount.toFixed(2)} already paid)` : ''}`)
     }
-    if (split.paid_amount > 0) lines.push(`  Already paid: $${split.paid_amount.toFixed(2)}`)
-    lines.push(`  Remaining for this expense: $${due.toFixed(2)}`)
   }
 
-  return `Hi ${name}, here is your itemized bill from Tillerman:` + lines.join('\n') + `\n\nTOTAL STILL OWED: $${totalDue.toFixed(2)}`
+  const header = `1. ${expense.merchant || 'Expense'}${dateText ? ' — ' + dateText : ''}`
+  return `Hi ${name}, here's your bill from Tillerman:\n\n${header}\n${itemLines.join('\n')}\n\n— — —\nTotal you owe: $${totalDue.toFixed(2)}`
 }
 
 async function copyPersonBill(expense, contactId, button) {
