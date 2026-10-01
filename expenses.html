@@ -411,7 +411,11 @@ table.sheet tbody td:first-child { padding-left:20px; }
               <span class="people-bar-label">People:</span>
               <button class="add-person-pill" id="manualAddPersonBtn" type="button">+ Add person</button>
             </div>
-            <div class="field-help" style="margin-top:6px;">Click a person to include them in an equal split. Leave everyone unselected to keep this just for you.</div>
+            <div class="field-help" style="margin-top:6px;">Click a person to include them in the split. Leave everyone unselected to keep this just for you.</div>
+            <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--text2); cursor:pointer;">
+              <input type="checkbox" id="m-include-me" checked style="width:auto; margin:0;">
+              Include my own share (uncheck if the full amount is owed to you by the selected people)
+            </label>
           </div>
           <div class="field"><div class="label">Your share</div><input type="text" id="m-share" placeholder="$0.00" readonly style="color:var(--accent); font-family:var(--ff-m);"></div>
           <div class="field field-full" style="grid-column:1/-1;"><div class="label">Notes</div><textarea id="m-notes" placeholder="Optional note…" style="min-height:50px;"></textarea></div>
@@ -1450,10 +1454,20 @@ table.sheet tbody td:first-child { padding-left:20px; }
   //  MANUAL CALC
   // ─────────────────────────────────────────────
   document.getElementById('m-amount').addEventListener('input', manualCalc)
+  document.getElementById('m-include-me').addEventListener('change', manualCalc)
   function manualCalc() {
     const amt = parseFloat(document.getElementById('m-amount').value) || 0
-    const shareCount = manualSplitContacts.length + 1
-    const share = shareCount > 1 ? amt / shareCount : amt
+    const includeMe = document.getElementById('m-include-me').checked
+    let share
+    if (manualSplitContacts.length === 0) {
+      // No one else involved — it's entirely yours regardless of the checkbox.
+      share = amt
+    } else if (includeMe) {
+      share = amt / (manualSplitContacts.length + 1)
+    } else {
+      // Full amount is owed to you by the selected people — none of it is yours.
+      share = 0
+    }
     document.getElementById('m-share').value = '$' + share.toFixed(2)
     updateSubmitBar()
   }
@@ -1643,8 +1657,12 @@ table.sheet tbody td:first-child { padding-left:20px; }
           return
         }
 
-        const shareCount = manualSplitContacts.length + 1
-        const perPerson = shareCount > 1 ? amt / shareCount : 0
+        const includeMe = document.getElementById('m-include-me').checked
+        const perPerson = manualSplitContacts.length === 0
+          ? 0
+          : includeMe
+            ? amt / (manualSplitContacts.length + 1)
+            : amt / manualSplitContacts.length
 
         const expenseRecord = {
           owner_id: currentUser.id,
@@ -1757,6 +1775,22 @@ table.sheet tbody td:first-child { padding-left:20px; }
       document.getElementById('m-card').value = expense.payment_method || ''
       document.getElementById('m-notes').value = expense.notes || ''
       manualSplitContacts = (expense.expense_splits || []).map(s => s.contact_id).filter(Boolean)
+
+      // Infer whether the owner's own share was included from the saved
+      // split amounts: compare the actual per-person amount against what
+      // it would be with vs without the owner sharing in the total.
+      const existingSplits = expense.expense_splits || []
+      if (manualSplitContacts.length > 0 && existingSplits.length > 0) {
+        const total = Number(expense.total_amount || 0)
+        const actualShare = Number(existingSplits[0].amount_owed || 0)
+        const shareIncluded = total / (manualSplitContacts.length + 1)
+        const shareExcluded = total / manualSplitContacts.length
+        const includeMe = Math.abs(actualShare - shareIncluded) <= Math.abs(actualShare - shareExcluded)
+        document.getElementById('m-include-me').checked = includeMe
+      } else {
+        document.getElementById('m-include-me').checked = true
+      }
+
       renderManualSplitPicker()
       manualCalc()
       updatePeopleBar()
