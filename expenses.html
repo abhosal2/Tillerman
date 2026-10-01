@@ -227,6 +227,37 @@ table.sheet tbody td:first-child { padding-left:20px; }
   .submit-summary { max-width:55%; }
   .tabs { width:100%; }
   .tab { flex:1; padding:7px 10px; }
+  .section-body { padding:16px; }
+  .upload-zone { padding:28px 16px; }
+  .people-bar { padding:12px 16px; }
+
+  /* Turn the receipt item table into a stack of cards instead of a wide
+     table that forces horizontal scrolling on a phone. */
+  .sheet-wrap { overflow-x:visible; }
+  table.sheet thead { display:none; }
+  table.sheet, table.sheet tbody, table.sheet tr { display:block; width:100%; }
+  table.sheet tbody tr {
+    display:block; position:relative; border:1px solid var(--border);
+    border-radius:var(--r); margin:10px; padding:14px 44px 14px 14px;
+    background:var(--bg3);
+  }
+  table.sheet tbody td {
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; padding:7px 0; border:none;
+  }
+  table.sheet tbody td:first-child, table.sheet tbody td:last-child { padding-left:0; padding-right:0; }
+  table.sheet tbody td[data-label]::before {
+    content:attr(data-label); font-size:10px; color:var(--text3);
+    text-transform:uppercase; letter-spacing:.05em; font-family:var(--ff-m);
+    flex-shrink:0;
+  }
+  .row-num { display:none; }
+  table.sheet tbody td.item-name-cell { display:block; padding-bottom:10px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+  table.sheet tbody td.item-name-cell input { font-size:15px; }
+  .assignee-cell { justify-content:flex-end; flex-wrap:wrap; }
+  .split-toggle { justify-content:flex-end; flex-wrap:wrap; }
+  td.row-del-cell { position:absolute; top:10px; right:10px; padding:0; }
+  .add-row-btn { margin:0 10px 10px; width:calc(100% - 20px); border-top:none; border:1px dashed var(--border2); border-radius:var(--r); }
 }
 
 @media (max-width: 520px) {
@@ -234,6 +265,9 @@ table.sheet tbody td:first-child { padding-left:20px; }
   .submit-summary { max-width:100%; }
   .submit-actions { width:100%; }
   .submit-actions > * { flex:1; justify-content:center; }
+  .page-title { font-size:20px; }
+  .totals-bar { padding:14px 16px; gap:14px 20px; }
+  .total-val { font-size:17px; }
 }
 
 </style>
@@ -1015,14 +1049,14 @@ table.sheet tbody td:first-child { padding-left:20px; }
             <button class="edit-mini" type="button" data-row="${row.id}" data-action="edit-name" title="Edit item name">✎</button>
           </div>
         </td>
-        <td class="item-qty">
+        <td class="item-qty" data-label="Qty">
           <input type="number" value="${row.qty}" min="1"
             style="width:50px;background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:2px 0;text-align:center;font-family:var(--ff-m);font-size:12px;"
             data-row="${row.id}" data-action="qty"
             onfocus="this.style.borderBottomColor='var(--border2)'"
             onblur="this.style.borderBottomColor='transparent'">
         </td>
-        <td class="item-price">
+        <td class="item-price" data-label="Unit price">
           <div class="inline-edit-wrap">
             <span style="color:var(--text3);font-size:11px;">$</span>
             <input type="number" value="${row.unitPrice.toFixed(2)}" step="0.01"
@@ -1033,16 +1067,16 @@ table.sheet tbody td:first-child { padding-left:20px; }
             <button class="edit-mini" type="button" data-row="${row.id}" data-action="edit-price" title="Edit price">✎</button>
           </div>
         </td>
-        <td class="item-price ${row.splitType==='split'?'split':''}">$${total}</td>
-        <td><div class="assignee-cell">${assigneeHTML}<button class="edit-mini" type="button" data-row="${row.id}" data-action="edit-assignment" title="Edit assignment">✎</button></div></td>
-        <td>
+        <td class="item-price ${row.splitType==='split'?'split':''}" data-label="Total">$${total}</td>
+        <td data-label="Assigned to"><div class="assignee-cell">${assigneeHTML}<button class="edit-mini" type="button" data-row="${row.id}" data-action="edit-assignment" title="Edit assignment">✎</button></div></td>
+        <td data-label="Split">
           <div class="split-toggle">
             <button class="st-btn ${stMine}"   data-row="${row.id}" data-split="mine">Mine</button>
             <button class="st-btn ${stTheirs}" data-row="${row.id}" data-split="theirs">Theirs</button>
             <button class="st-btn ${stSplit}"  data-row="${row.id}" data-split="split">Split</button>
           </div>
         </td>
-        <td><button class="row-del" data-row="${row.id}" data-action="delete" title="Remove">✕</button></td>
+        <td class="row-del-cell"><button class="row-del" data-row="${row.id}" data-action="delete" title="Remove">✕</button></td>
       `
       tbody.appendChild(tr)
     })

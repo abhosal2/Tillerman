@@ -183,8 +183,22 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   nav { padding:0 16px; }
   .shell { padding:0 16px; }
   .nav-user { display:none; }
+  .nav-cta span.nav-cta-text { display:none; }
+  .nav-cta { padding:8px 11px; }
   .stat-strip { grid-template-columns:1fr; }
+  .stat-cell { padding:14px 16px; }
+  .stat-val { font-size:22px; }
+  .page-header { padding:24px 0 18px; }
+  .greeting { font-size:21px; }
+  .security-bar { padding:10px 12px; font-size:11px; }
+  .panel-head { padding:12px 14px; }
   .txn-row { padding:13px 14px; gap:8px; }
+  .owed-row { padding:12px 14px; }
+  .owed-footer { flex-direction:column; align-items:flex-start; gap:3px; }
+  .tip-card { padding:14px 16px; }
+  .modal-box { padding:18px; }
+  .modal-actions { flex-direction:column; }
+  footer { flex-direction:column; gap:10px; padding:16px 16px; text-align:center; }
 }
 
 @keyframes fadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
@@ -202,7 +216,7 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       <div class="nav-avatar">YO</div>
       <span>Local device</span>
     </div>
-    <a class="nav-cta" href="expenses.html">+ Add expense</a>
+    <a class="nav-cta" href="expenses.html">+ <span class="nav-cta-text">Add expense</span></a>
   </div>
 </nav>
 
