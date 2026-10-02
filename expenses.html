@@ -537,6 +537,11 @@ table.sheet tbody td:first-child { padding-left:20px; }
     return `rgba(${r},${g},${b},${a})`
   }
   function getPerson(pid) { return PEOPLE.find(p=>p.id===pid) }
+  // Row ids are numbers for newly-added rows (Date.now()) but UUID strings
+  // for rows loaded from the database when editing a saved transaction.
+  // HTML data-* attributes are always strings, so comparisons must go
+  // through String() on both sides rather than relying on ===.
+  function findRow(id) { return rows.find(r => String(r.id) === String(id)) }
   function showToast(msg) {
     const t = document.getElementById('toast')
     t.textContent = msg
@@ -1085,7 +1090,13 @@ table.sheet tbody td:first-child { padding-left:20px; }
     tbody.onclick = (e) => {
       const t = e.target.closest('[data-action],[data-split]')
       if (!t) return
-      const id = parseInt(t.dataset.row)
+      // Row ids can be either numbers (freshly added/uploaded rows) or UUID
+      // strings (rows loaded from the database while editing a saved
+      // transaction) — parseInt() used to mangle a UUID like
+      // "91778ce0-d48d-..." into 91778, which never matched any row and
+      // silently broke every icon on the edit page. Keep the id as-is and
+      // compare it with findRow()/String() instead.
+      const id = t.dataset.row
       if (t.dataset.split) setSplitType(e, id, t.dataset.split)
       if (t.dataset.action==='delete') deleteRow(id)
       if (t.dataset.action==='assign') openDropdown(e, id)
@@ -1101,8 +1112,8 @@ table.sheet tbody td:first-child { padding-left:20px; }
     }
     tbody.onchange = (e) => {
       const t = e.target
-      const id = parseInt(t.dataset.row)
-      if (t.dataset.action==='name')  { const r=rows.find(r=>r.id===id); if(r) r.name=t.value }
+      const id = t.dataset.row
+      if (t.dataset.action==='name')  { const r=findRow(id); if(r) r.name=t.value }
       if (t.dataset.action==='qty')   updateRowQty(id, t.value)
       if (t.dataset.action==='price') updateRowPrice(id, t.value)
     }
@@ -1114,10 +1125,10 @@ table.sheet tbody td:first-child { padding-left:20px; }
   // ─────────────────────────────────────────────
   //  ROW MUTATIONS
   // ─────────────────────────────────────────────
-  function updateRowQty(id, val)   { const r=rows.find(r=>r.id===id); if(r){r.qty=Math.max(1,parseFloat(val)||1);} renderSheet() }
-  function updateRowPrice(id, val) { const r=rows.find(r=>r.id===id); if(r){ const n=parseFloat(val); r.unitPrice=Number.isFinite(n)?n:0; } renderSheet() }
+  function updateRowQty(id, val)   { const r=findRow(id); if(r){r.qty=Math.max(1,parseFloat(val)||1);} renderSheet() }
+  function updateRowPrice(id, val) { const r=findRow(id); if(r){ const n=parseFloat(val); r.unitPrice=Number.isFinite(n)?n:0; } renderSheet() }
   function setSplitType(event, id, type) {
-    const row = rows.find(r => r.id === id)
+    const row = findRow(id)
     if (!row) return
 
     if (type === 'mine') {
@@ -1129,7 +1140,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
 
     openAssignModal(id, type)
   }
-  function deleteRow(id)           { rows=rows.filter(r=>r.id!==id); renderSheet() }
+  function deleteRow(id)           { rows=rows.filter(r=>String(r.id)!==String(id)); renderSheet() }
 
   document.getElementById('addRowBtn').addEventListener('click', () => {
     rows.push({ id:Date.now(), name:'New item', qty:1, unitPrice:0, assignees:[], splitType:'mine' })
@@ -1331,7 +1342,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   let pendingAssignment = null
 
   function openAssignmentEditor(rowId) {
-    const row = rows.find(r => r.id === rowId)
+    const row = findRow(rowId)
     if (!row) return
 
     if (row.splitType === 'mine') {
@@ -1342,7 +1353,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   }
 
   function openAssignModal(rowId, splitType) {
-    const row = rows.find(r => r.id === rowId)
+    const row = findRow(rowId)
     if (!row) return
 
     // Show every saved contact, not just people already marked as a
@@ -1419,7 +1430,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
       return
     }
 
-    const row = rows.find(r => r.id === pendingAssignment.rowId)
+    const row = findRow(pendingAssignment.rowId)
     if (!row) return
 
     row.splitType = appliedType
@@ -1444,7 +1455,7 @@ table.sheet tbody td:first-child { padding-left:20px; }
   // ─────────────────────────────────────────────
   function openDropdown(e, rowId) {
     e.stopPropagation()
-    const row = rows.find(r => r.id === rowId)
+    const row = findRow(rowId)
     const dd  = document.getElementById('personDropdown')
     const ov  = document.getElementById('dropdownOverlay')
     let html  = ''
@@ -1464,10 +1475,10 @@ table.sheet tbody td:first-child { padding-left:20px; }
       const item = ev.target.closest('[data-pid],[data-clear]')
       if (!item) return
       if (item.dataset.clear) {
-        const r = rows.find(r => r.id === parseInt(item.dataset.clear))
+        const r = findRow(item.dataset.clear)
         if (r) { r.assignees = []; r.splitType = 'mine' }
       } else {
-        const r   = rows.find(r => r.id === parseInt(item.dataset.row))
+        const r   = findRow(item.dataset.row)
         const pid = item.dataset.pid
         if (!r) return
         if (r.assignees.includes(pid)) {
