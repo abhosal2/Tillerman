@@ -19,6 +19,9 @@
 <script type="module" src="supabase.js"></script>
 <!-- ─────────────────────────── -->
 
+<!-- Builds the .xlsx file for the "Export spreadsheet" button, entirely in the browser. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -291,7 +294,8 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
       <div class="panel">
         <div class="panel-head">
           <div class="panel-title">Who owes you</div>
-          <div style="display:flex; gap:6px;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+            <button class="panel-btn" id="exportSheetBtn" type="button" disabled>📊 Export spreadsheet</button>
             <button class="panel-btn" id="openPeopleBtn" type="button">👥 Manage people</button>
             <button class="panel-btn" id="openSettleBtn" type="button" disabled>Settle balances</button>
           </div>
@@ -706,8 +710,10 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
     const container = document.getElementById('owedContainer')
     const people = computeOwedByPerson(splits)
     const settleBtn = document.getElementById('openSettleBtn')
+    const exportBtn = document.getElementById('exportSheetBtn')
 
     settleBtn.disabled = people.length === 0
+    exportBtn.disabled = people.length === 0
 
     if (people.length === 0) {
       container.innerHTML = `
@@ -1117,6 +1123,71 @@ footer { border-top:1px solid var(--border); padding:20px 28px; display:flex; ju
   document.getElementById('deletePersonModal').addEventListener('click', event => {
     if (event.target.id === 'deletePersonModal') closeDeletePersonModal()
   })
+
+  // ─────────────────────────────────────────────
+  //  EXPORT SPREADSHEET — one sheet, one block per person: their name,
+  //  every item currently charged to them (across all expenses), and a
+  //  Total row at the bottom of that person's block. Mirrors the same
+  //  unpaid-balance data the "Copy bill" buttons use.
+  // ─────────────────────────────────────────────
+  function exportPeopleSpreadsheet() {
+    if (typeof XLSX === 'undefined') {
+      alert('The spreadsheet library did not load. Please check your connection and try again.')
+      return
+    }
+
+    const splits = getAllSplits(cachedExpenses)
+    const people = computeOwedByPerson(splits)
+    if (people.length === 0) {
+      alert('No pending balances to export yet.')
+      return
+    }
+
+    const rows = [['Person', 'Item', 'Qty', 'Amount']]
+    let grandTotal = 0
+
+    people.forEach(person => {
+      rows.push([person.name, '', '', ''])
+      let personTotal = 0
+
+      cachedExpenses.forEach(expense => {
+        const split = expense.splits.find(s => s.contact_id === person.key && splitRemaining(s) > 0.004)
+        if (!split) return
+
+        const due = splitRemaining(split)
+        const assignedItems = expense.items.map(item => personItemAmount(item, person.key)).filter(Boolean)
+
+        if (assignedItems.length) {
+          assignedItems.forEach(item => {
+            const label = `${expense.merchant || 'Expense'} — ${item.name}`
+            rows.push(['', label, item.qty, Number(item.amount.toFixed(2))])
+          })
+          if (split.paid_amount > 0) {
+            rows.push(['', `  (${expense.merchant || 'Expense'} — already paid $${split.paid_amount.toFixed(2)})`, '', Number((-split.paid_amount).toFixed(2))])
+          }
+        } else {
+          rows.push(['', expense.merchant || 'Expense', '', Number(due.toFixed(2))])
+        }
+        personTotal += due
+      })
+
+      rows.push(['', 'Total', '', Number(personTotal.toFixed(2))])
+      rows.push(['', '', '', ''])
+      grandTotal += personTotal
+    })
+
+    rows.push(['Grand total', '', '', Number(grandTotal.toFixed(2))])
+
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = [{ wch: 22 }, { wch: 42 }, { wch: 7 }, { wch: 12 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Balances')
+
+    const dateStr = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `Tillerman-balances-${dateStr}.xlsx`)
+  }
+
+  document.getElementById('exportSheetBtn').addEventListener('click', exportPeopleSpreadsheet)
 
   document.getElementById('refreshTip').addEventListener('click', event => {
     event.preventDefault()
